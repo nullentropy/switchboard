@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
 
 func git(dir string, env []string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), env...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
@@ -52,7 +51,7 @@ func slug(s string) string {
 }
 
 func worktreeHome() string {
-	base, err := os.UserConfigDir()
+	base, err := dataDir()
 	if err != nil {
 		base = os.TempDir()
 	}

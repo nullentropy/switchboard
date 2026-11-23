@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"os/exec"
 	"sync"
 	"time"
 )
@@ -62,7 +61,7 @@ func (h *Hub) loadCodexModels() {
 	if checkBin(h, "codex") != nil {
 		return
 	}
-	cmd := exec.Command(h.bin("codex"), "app-server")
+	cmd := command(h.bin("codex"), "app-server")
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return

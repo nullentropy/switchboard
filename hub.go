@@ -110,6 +110,24 @@ func (h *Hub) UpdateSettings(fn func(*Settings)) {
 	h.each(func(v *View) { v.settingsChanged() })
 }
 
+func (h *Hub) SetDispatcherModel(model string) {
+	d := h.Dispatcher
+	d.mu.Lock()
+	d.Meta.Model = model
+	d.mu.Unlock()
+	h.save()
+	d.changed()
+}
+
+func (h *Hub) dispatcherModelChoices() ([]string, int) {
+	model := h.Dispatcher.Snapshot().Meta.Model
+	names := append([]string{"Default"}, h.models("claude")...)
+	if model != "" && indexOf(names, model) == 0 && names[0] != model {
+		names = append(names, model)
+	}
+	return names, indexOf(names, model)
+}
+
 func (h *Hub) RepoBusy(dir string) bool {
 	root := repoRoot(dir)
 	if root == "" {

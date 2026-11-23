@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"os/exec"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -27,7 +27,7 @@ type claudeInit struct {
 func claudeInitialize(bin, dir string) (*claudeInit, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose")
+	cmd := commandContext(ctx, bin, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose")
 	cmd.Dir = dir
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -66,7 +66,10 @@ func claudeInitialize(bin, dir string) (*claudeInit, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return nil, sc.Err()
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	return nil, errors.New("claude exited without answering initialize")
 }
 
 func (h *Hub) commands(provider, dir string) []slashCmd {

@@ -2,9 +2,7 @@ package main
 
 import (
 	"fmt"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,14 +33,6 @@ func parseProcs(out string) []procRow {
 		rows = append(rows, procRow{pid, ppid, cpu, rss, filepath.Base(strings.Trim(strings.Join(f[4:], " "), "()"))})
 	}
 	return rows
-}
-
-func readProcs() []procRow {
-	out, err := exec.Command("ps", "-A", "-o", "pid=,ppid=,%cpu=,rss=,comm=").Output()
-	if err != nil {
-		return nil
-	}
-	return parseProcs(string(out))
 }
 
 type usage struct {
@@ -86,18 +76,37 @@ type loadSample struct {
 	MemFree              int
 	Pressure             int
 	Swap                 string
+	ByCPU                bool
+	CPUBusy              float64
+}
+
+func (s loadSample) cpuOverloaded() bool {
+	if s.ByCPU {
+		return s.CPUBusy >= 95
+	}
+	return s.Load1 > 2*float64(s.Cores)
+}
+
+func (s loadSample) cpuCalm() bool {
+	if s.ByCPU {
+		return s.CPUBusy < 80
+	}
+	return s.Load1 <= 1.25*float64(s.Cores)
 }
 
 func (s loadSample) overloaded() bool {
-	return s.Load1 > 2*float64(s.Cores) || s.Pressure >= 4 || (s.MemFree > 0 && s.MemFree < 12)
+	return s.cpuOverloaded() || s.Pressure >= 4 || (s.MemFree > 0 && s.MemFree < 12)
 }
 
 func (s loadSample) calm() bool {
-	return s.Load1 <= 1.25*float64(s.Cores) && s.Pressure < 4 && (s.MemFree == 0 || s.MemFree >= 20)
+	return s.cpuCalm() && s.Pressure < 4 && (s.MemFree == 0 || s.MemFree >= 20)
 }
 
 func (s loadSample) String() string {
 	t := fmt.Sprintf("load %.0f now, %.0f over 5 minutes, on %d cores", s.Load1, s.Load5, s.Cores)
+	if s.ByCPU {
+		t = fmt.Sprintf("CPU %.0f%% busy on %d cores", s.CPUBusy, s.Cores)
+	}
 	if s.MemFree > 0 {
 		t += fmt.Sprintf(", %d%% of memory free", s.MemFree)
 	}
@@ -111,30 +120,6 @@ func (s loadSample) String() string {
 		t += ", " + s.Swap + " of swap used"
 	}
 	return t
-}
-
-func sysctl(name string) string {
-	out, err := exec.Command("sysctl", "-n", name).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func readLoad() loadSample {
-	s := loadSample{Cores: runtime.NumCPU()}
-	f := strings.Fields(strings.Trim(sysctl("vm.loadavg"), "{} "))
-	if len(f) >= 3 {
-		s.Load1, _ = strconv.ParseFloat(f[0], 64)
-		s.Load5, _ = strconv.ParseFloat(f[1], 64)
-		s.Load15, _ = strconv.ParseFloat(f[2], 64)
-	}
-	s.MemFree, _ = strconv.Atoi(sysctl("kern.memorystatus_level"))
-	s.Pressure, _ = strconv.Atoi(sysctl("kern.memorystatus_vm_pressure_level"))
-	if sw := strings.Fields(sysctl("vm.swapusage")); len(sw) >= 6 && sw[3] == "used" {
-		s.Swap = strings.TrimPrefix(sw[5], "=")
-	}
-	return s
 }
 
 type loadWatch struct {

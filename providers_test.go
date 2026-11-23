@@ -59,6 +59,12 @@ func (f *fakeIO) until(method string) map[string]any {
 }
 
 func fakeClaude() {
+	if path := os.Getenv("SWITCHBOARD_FAKE_ARGS"); path != "" {
+		if fh, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+			fmt.Fprintln(fh, strings.Join(os.Args[1:], " "))
+			fh.Close()
+		}
+	}
 	f := newFakeIO()
 	f.write(map[string]any{"type": "system", "subtype": "init"})
 	for {
@@ -231,6 +237,19 @@ func TestTheClaudeModelPickerListsTheModelsTheCLIOffers(t *testing.T) {
 	got := fmt.Sprint(h.models("claude"))
 	if want := "[deep-thought heart-of-gold]"; got != want {
 		t.Fatalf("models %s, want %s", got, want)
+	}
+}
+
+func TestAClaudeThatExitsWithoutAnsweringFallsBackToTheBuiltInModelsAndNoCommands(t *testing.T) {
+	marvin := t.TempDir() + "/marvin"
+	os.WriteFile(marvin, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	h := newHub(map[string]string{"claude": marvin}, "")
+	h.loadClaudeModels()
+	if got, want := fmt.Sprint(h.models("claude")), fmt.Sprint(staticModels["claude"]); got != want {
+		t.Fatalf("models %s, want %s", got, want)
+	}
+	if got := h.commands("claude", t.TempDir()); got != nil {
+		t.Fatalf("commands %+v, want none", got)
 	}
 }
 

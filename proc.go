@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -42,7 +41,7 @@ type rpcMsg struct {
 var errExited = errors.New("the process exited")
 
 func startProc(a *Agent, bin string, args []string, onLine func([]byte)) (*proc, error) {
-	cmd := exec.Command(bin, args...)
+	cmd := command(bin, args...)
 	cmd.Dir = a.Meta.Cwd
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -54,11 +53,8 @@ func startProc(a *Agent, bin string, args []string, onLine func([]byte)) (*proc,
 	}
 	p := &proc{cmd: cmd, stdin: stdin, stderr: &tailBuf{max: 4096}, done: make(chan struct{}), waits: map[string]chan rpcMsg{}}
 	cmd.Stderr = p.stderr
-	if err := cmd.Start(); err != nil {
+	if err := startProcess(cmd, a != a.hub.Dispatcher); err != nil {
 		return nil, fmt.Errorf("start %s: %w", bin, err)
-	}
-	if a != a.hub.Dispatcher {
-		_ = syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, 10)
 	}
 	go func() {
 		sc := bufio.NewScanner(stdout)

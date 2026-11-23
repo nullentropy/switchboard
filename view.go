@@ -124,14 +124,14 @@ func (v *View) build() *caution.Node {
 	s.SetFonts("Inter", "JetBrains Mono")
 
 	s.SetMenu(caution.Menu{Title: "Sessions", Items: []caution.MenuItem{
-		{Title: "New Session…", Key: "n", OnPick: v.openNew},
-		{Title: "Commands…", Key: "k", OnPick: v.openPalette},
-		{Title: "Ask the Dispatcher", Key: "l", OnPick: v.focusCommand},
-		{Title: "Next Session That Needs You", Key: "j", OnPick: v.nextWaiting},
-		{Title: "All Sessions", Key: "0", OnPick: v.closeFocus},
+		{Title: "New Session…", Key: modKey + "+n", OnPick: v.openNew},
+		{Title: "Commands…", Key: modKey + "+k", OnPick: v.openPalette},
+		{Title: "Ask the Dispatcher", Key: modKey + "+l", OnPick: v.focusCommand},
+		{Title: "Next Session That Needs You", Key: modKey + "+j", OnPick: v.nextWaiting},
+		{Title: "All Sessions", Key: modKey + "+0", OnPick: v.closeFocus},
 		{Title: "Keyboard Shortcuts", OnPick: v.openShortcuts},
 		{Sep: true},
-		{Title: "Settings…", Key: ",", OnPick: v.openSettings},
+		{Title: "Settings…", Key: modKey + "+,", OnPick: v.openSettings},
 	}})
 	v.bindKeys()
 
@@ -156,8 +156,8 @@ func (v *View) build() *caution.Node {
 		caution.HStack().Gap(8).Align("center").Anchor(caution.A{Right: px(16), CenterY: px(0)}).Kids(
 			v.limitsBox,
 			v.projBox,
-			caution.Button("Commands  ⌘K").Tip("Every action and session (Cmd+K)").OnClick(v.openPalette),
-			caution.Button("New session  ⌘N").Primary().Tip("Or double-click empty space").OnClick(v.openNew),
+			caution.Button("Commands  "+modLabel+"K").Tip("Every action and session ("+modLabel+"K)").OnClick(v.openPalette),
+			caution.Button("New session  "+modLabel+"N").Primary().Tip("Or double-click empty space").OnClick(v.openNew),
 		),
 	)
 	rule := caution.Panel().Dock("top").H(1).Bg("$edgeSoft")
@@ -250,7 +250,7 @@ func (v *View) buildConsole() *caution.Node {
 	return caution.Panel().Dock("bottom").H(consoleH).Bg("$titlebar").Kids(
 		caution.Panel().H(1).Bg("$edgeSoft").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)}),
 		caution.HStack().Gap(10).Align("center").Anchor(caution.A{Left: px(16), Right: px(statusW + 28), CenterY: px(0)}).Kids(
-			icon(icSparkles, 16, "$accent"), v.cmd.Fill(1), kbd("⌘L"), caution.Panel().W(8),
+			icon(icSparkles, 16, "$accent"), v.cmd.Fill(1), kbd(modLabel+"L"), caution.Panel().W(8),
 			caution.Button("Shortcuts  ?").Tip("Every keyboard shortcut").OnClick(v.openShortcuts)),
 		caution.HStack().Gap(8).Align("center").W(statusW).Anchor(caution.A{Right: px(16), CenterY: px(0)}).
 			Kids(v.dDot, v.dLine, v.dActions),
@@ -646,12 +646,21 @@ func (v *View) openSettings() {
 	snd := caution.Checkbox("A soft tone when a session needs you", set.Sounds).OnToggle(func(b bool) {
 		v.hub.UpdateSettings(func(s *Settings) { s.Sounds = b })
 	})
+	models, cur := v.hub.dispatcherModelChoices()
+	dmodel := caution.Select(models, cur).OnSelect(func(i int) {
+		model := ""
+		if i > 0 {
+			model = models[i]
+		}
+		v.hub.SetDispatcherModel(model)
+	})
 	lbl := func(s string) *caution.Node { return caution.Label(s).FontSize(13).Color("$inkDim") }
-	d := caution.Dialog("Settings").CardSize(480, 190).Kids(
-		caution.Grid([]caution.GridCol{{Px: 80}, {Weight: 1, Align: "stretch"}}).ColGap(12).RowGap(12).
+	d := caution.Dialog("Settings").CardSize(480, 234).Kids(
+		caution.Grid([]caution.GridCol{{Px: 120}, {Weight: 1, Align: "stretch"}}).ColGap(12).RowGap(12).
 			Anchor(caution.A{Left: px(20), Right: px(20), Top: px(18)}).Kids(
 			lbl("Theme"), theme,
 			lbl("Sound"), snd,
+			lbl("Dispatcher model"), dmodel,
 		),
 		caution.Button("Done").Primary().Anchor(caution.A{Right: px(20), Bottom: px(20)}).OnClick(v.closeDialog),
 	)

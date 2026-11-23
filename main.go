@@ -23,10 +23,7 @@ func main() {
 	demo := flag.Bool("demo", false, "fill the window with pretend sessions, to look at the UI; nothing is saved")
 	demoN := flag.Int("demo-sessions", 7, "how many pretend sessions -demo starts")
 	flag.Parse()
-	if native.InBundle() {
-		logToFile()
-		usePathFromLoginShell()
-	}
+	prepareApp()
 
 	bins := map[string]string{"claude": *claudeBin, "codex": *codexBin, "gemini": *geminiBin}
 	if *demo {
@@ -36,7 +33,7 @@ func main() {
 	hub := newHub(bins, *statePath)
 	go hub.loadCodexModels()
 	go hub.loadClaudeModels()
-	if err := checkBin(hub, "claude"); err != nil {
+	if err := checkBin(hub, "claude"); err != nil && !*demo {
 		log.Fatal("claude is not on PATH; pass -claude /path/to/claude")
 	}
 	if *demo {
@@ -61,7 +58,7 @@ func main() {
 		win := &windowSaver{hub: hub}
 		w, h := windowSize(saved)
 		err := native.Run(mount, native.Options{Title: "Switchboard", W: w, H: h, Maximized: saved.Maximized,
-			OnWindow: win.note, CustomTitlebar: runtime.GOOS == "darwin", TitlebarStyle: "tall"})
+			OnWindow: win.note, AppID: "switchboard", CustomTitlebar: runtime.GOOS == "darwin", TitlebarStyle: "tall"})
 		win.flush()
 		if err != nil {
 			log.Print(err)

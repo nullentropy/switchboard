@@ -126,7 +126,7 @@ func (f *focusView) build() {
 		),
 		caution.HStack().Gap(8).Align("center").Anchor(caution.A{Right: px(14), CenterY: px(0)}).Kids(
 			f.modeSel.W(150),
-			iconButton(icPause, "Interrupt the turn (⌘.)", a.Interrupt),
+			iconButton(icPause, "Interrupt the turn ("+modLabel+".)", a.Interrupt),
 			iconButton(icPower, "End session…", func() { f.v.confirmEnd(a) }),
 		),
 	)
@@ -691,7 +691,7 @@ func (f *focusView) always(p *Pending) *caution.Node {
 	if !p.CanAlways {
 		return caution.Panel().W(0)
 	}
-	return caution.Button("Always  ⇧A").Tip("Allow this for the rest of the session").
+	return caution.Button("Always  " + shiftLabel + "A").Tip("Allow this for the rest of the session").
 		OnClick(func() { f.a.Answer(p.ReqID, true, true, nil) })
 }
 

@@ -76,10 +76,10 @@ func loginPath(shell string) string {
 	return parts[len(parts)-2]
 }
 
-func usePathFromLoginShell() {
+func usePathFromLoginShell(fallback string) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
-		shell = "/bin/zsh"
+		shell = fallback
 	}
 	if p := loginPath(shell); p != "" {
 		os.Setenv("PATH", p)

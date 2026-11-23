@@ -42,3 +42,18 @@ func TestTheDispatcherHearsOnceWhenTheLaptopIsOverloadedAndAgainWhenItRecovers(t
 		}
 	}
 }
+
+func TestWindowsJudgesOverloadByHowBusyTheCPUIs(t *testing.T) {
+	busy := loadSample{Cores: 16, MemFree: 40, ByCPU: true, CPUBusy: 97}
+	middling := loadSample{Cores: 16, MemFree: 40, ByCPU: true, CPUBusy: 85}
+	calm := loadSample{Cores: 16, MemFree: 40, ByCPU: true, CPUBusy: 42}
+	if !busy.overloaded() || middling.overloaded() || calm.overloaded() {
+		t.Fatalf("overloaded: busy %v, middling %v, calm %v", busy.overloaded(), middling.overloaded(), calm.overloaded())
+	}
+	if busy.calm() || middling.calm() || !calm.calm() {
+		t.Fatalf("calm: busy %v, middling %v, calm %v", busy.calm(), middling.calm(), calm.calm())
+	}
+	if got := busy.String(); !strings.HasPrefix(got, "CPU 97% busy on 16 cores") {
+		t.Fatalf("report %q", got)
+	}
+}

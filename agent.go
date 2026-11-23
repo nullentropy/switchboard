@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -148,8 +147,9 @@ type Agent struct {
 
 	extraArgs func() []string
 
-	p       *proc
-	toolIdx map[string]int
+	p         *proc
+	procModel string
+	toolIdx   map[string]int
 
 	costBase, procCost float64
 	ctxUsed, ctxWindow int
@@ -277,10 +277,17 @@ func (a *Agent) Send(text string) {
 		return
 	}
 	a.mu.Lock()
+	var old *proc
+	if a.p != nil && a.procModel != a.Meta.Model && a.State != Working && a.State != Starting && a.State != NeedsYou {
+		old, a.p = a.p, nil
+		a.costBase += a.procCost
+		a.procCost = 0
+	}
 	running := a.p != nil
 	if !running {
 		a.State = Starting
 		a.stopped = false
+		a.procModel = a.Meta.Model
 	}
 	send := text
 	if a.note != "" {
@@ -291,6 +298,9 @@ func (a *Agent) Send(text string) {
 	a.TurnFrom = time.Now()
 	a.Err = ""
 	a.mu.Unlock()
+	if old != nil {
+		old.stop()
+	}
 	a.changed()
 	if a != a.hub.Dispatcher {
 		cp := a.takeCheckpoint()
@@ -583,7 +593,7 @@ func (a *Agent) refreshBranch() {
 			a.mu.Unlock()
 		}
 	}
-	out, err := exec.Command("git", "-C", a.Meta.Cwd, "branch", "--show-current").Output()
+	out, err := command("git", "-C", a.Meta.Cwd, "branch", "--show-current").Output()
 	if err != nil {
 		return
 	}
@@ -610,9 +620,10 @@ func shortPath(p string) string {
 	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(p, home) {
 		p = "~" + p[len(home):]
 	}
-	parts := strings.Split(p, string(filepath.Separator))
+	sep := string(filepath.Separator)
+	parts := strings.Split(p, sep)
 	if len(parts) > 4 {
-		p = "…/" + strings.Join(parts[len(parts)-3:], "/")
+		p = "…" + sep + strings.Join(parts[len(parts)-3:], sep)
 	}
 	return p
 }
