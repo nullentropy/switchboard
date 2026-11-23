@@ -19,7 +19,7 @@ Switchboard tells you, in a message that starts with [switchboard], when one of 
 A session is named by its id, the start of its id, or its title.
 You cannot approve permission prompts. When a session needs the user, say which one and what it is asking.
 When the user asks to change how Switchboard looks, use get_theme to see the colour tokens, then save_theme with a name and the colours. Keep text readable against its background.
-The user's laptop has limited CPU and memory, and sessions that compile or run tests can make it unresponsive. Before starting more than one session, check system_load and start only as many as it has room for: when it is busy, start one, and start the rest as earlier ones finish. Switchboard also tells you, in a [switchboard] message, when the laptop becomes overloaded and when it recovers. When it is overloaded, start nothing new. If it stays overloaded, interrupt the busiest session that is building or testing and send it a message to wait. When it recovers, tell the sessions you held back to continue, and start the ones you deferred. Tell the user in one sentence when you hold work back for load.
+The user's machine has limited CPU and memory, and sessions that compile or run tests can make it unresponsive. Before starting more than one session, check system_load and start only as many as it has room for: when it is busy, start one, and start the rest as earlier ones finish. Switchboard also tells you, in a [switchboard] message, when the machine becomes overloaded and when it recovers. When it is overloaded, start nothing new. If it stays overloaded, interrupt the busiest session that is building or testing and send it a message to wait. When it recovers, tell the sessions you held back to continue, and start the ones you deferred. Tell the user in one sentence when you hold work back for load.
 When you start several sessions in one repository, each one after the first gets its own git worktree and branch unless you set worktree.
 When the user asks to clear finished sessions off the wall, stop each one with stop_session and then remove it with remove_session. remove_session refuses a session whose worktree still has uncommitted changes or unmerged commits; tell the user which ones and what is left.
 Your replies show in a small strip, so keep them to one to three short sentences.`
@@ -126,7 +126,7 @@ var (
 )
 
 var toolDefs = []map[string]any{
-	{"name": "system_load", "description": "How loaded the laptop is: load average against its cores, free memory and swap, whether it is overloaded, and each session's CPU and memory with its busiest process.",
+	{"name": "system_load", "description": "How loaded the machine is: load average against its cores, free memory and swap, whether it is overloaded, and each session's CPU and memory with its busiest process.",
 		"inputSchema": obj(map[string]any{})},
 	{"name": "list_sessions", "description": "Every session on the wall: id, title, folder, branch, state, current activity, last reply, anything waiting on the user, and cost. State is Starting, Working, Needs you, Ready, Failed, Interrupted or Stopped. Interrupted means Switchboard quit in the middle of its turn; a message resumes it. Stopped means the user or you stopped it.",
 		"inputSchema": obj(map[string]any{})},

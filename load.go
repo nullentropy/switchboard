@@ -138,11 +138,11 @@ func (w *loadWatch) step(s loadSample) string {
 	}
 	if !w.alerted && w.over >= 2 {
 		w.alerted = true
-		return "The laptop is overloaded: " + s.String() + "."
+		return "The machine is overloaded: " + s.String() + "."
 	}
 	if w.alerted && w.calm >= 2 {
 		w.alerted = false
-		return "The laptop has recovered: " + s.String() + "."
+		return "The machine has recovered: " + s.String() + "."
 	}
 	return ""
 }
@@ -187,7 +187,7 @@ func (l sessionLoad) String() string {
 func (h *Hub) loadReport() string {
 	s := readLoad()
 	var b strings.Builder
-	fmt.Fprintf(&b, "The laptop: %s.\n", s)
+	fmt.Fprintf(&b, "The machine: %s.\n", s)
 	switch {
 	case s.overloaded():
 		b.WriteString("It is overloaded. Do not start sessions until it recovers.\n")

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestTheDispatcherHearsOnceWhenTheLaptopIsOverloadedAndAgainWhenItRecovers(t *testing.T) {
+func TestTheDispatcherHearsOnceWhenTheMachineIsOverloadedAndAgainWhenItRecovers(t *testing.T) {
 	procs := parseProcs("  1     0   0.0   1000 /sbin/launchd\n" +
 		"100     1   2.0  200000 /Users/arthur/.local/bin/claude\n" +
 		"110   100 300.5 3000000 /usr/local/go/pkg/tool/darwin_arm64/compile\n" +
@@ -26,14 +26,14 @@ func TestTheDispatcherHearsOnceWhenTheLaptopIsOverloadedAndAgainWhenItRecovers(t
 		want string
 	}{
 		{busy, ""},
-		{busy, "overloaded"},
+		{busy, "The machine is overloaded"},
 		{busy, ""},
 		{tight, ""},
 		{calm, ""},
-		{calm, "recovered"},
+		{calm, "The machine has recovered"},
 		{calm, ""},
 		{tight, ""},
-		{critical, "overloaded"},
+		{critical, "The machine is overloaded"},
 	}
 	for i, st := range steps {
 		got := w.step(st.s)
