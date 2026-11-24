@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Switchboard: stop babysitting terminals</title>
+<meta name="description" content="Your agents do the work. Switchboard lets you know, politely, when one of them needs you.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <img src="icon.svg" alt="" width="40" height="40">
+  <h1>Switchboard</h1>
+  <nav><a href="https://github.com/nullentropy/switchboard">GitHub</a></nav>
+</header>
+
+<main>
+<section class="intro">
+  <h2>Stop babysitting terminals.</h2>
+  <p class="lead">Your agents do the work. Switchboard lets you know, politely, when one of them needs you.</p>
+  <p class="links">
+    <a class="button" href="#install">Install</a>
+    <a class="button quiet" href="https://github.com/nullentropy/switchboard">Source on GitHub</a>
+  </p>
+  <figure><a href="img/board.webp">
+    <img src="img/board.webp" width="1600" height="1000"
+      alt="The Switchboard board: one session waiting for approval, five working, one failed, and a goal called Find the Question with three sessions."></a>
+  </figure>
+</section>
+
+<section>
+  <h2>Nothing slips past you</h2>
+  <p>Claude Code, Codex and Gemini, all on one board.
+  Whoever is waiting on you is always on top, which is more than can be said for most queues.</p>
+</section>
+
+<section>
+  <h2>Undo is built in</h2>
+  <p>Every message is a checkpoint. If a turn goes sideways, rewind the files and carry on as if nothing happened. Mostly harmless, fully reversible.</p>
+  <figure><a href="img/session.webp">
+    <img src="img/session.webp" width="1600" height="1000" loading="lazy"
+      alt="An open Gemini session showing its messages and tool calls, with the list of other sessions on the left."></a>
+  </figure>
+</section>
+
+<section>
+  <h2>Delegate the delegating</h2>
+  <p>Tell the dispatcher what you want. It staffs the job and calls you when it's done. It does not hold meetings about it.</p>
+  <figure><a href="img/dispatcher.webp">
+    <img src="img/dispatcher.webp" width="1600" height="500" loading="lazy"
+      alt="The dispatcher conversation: asked to find the Question, it started three sessions and reports that one is waiting for approval."></a>
+  </figure>
+</section>
+
+<section id="install">
+  <h2>Install</h2>
+  <h3>macOS</h3>
+  <pre><code>curl -fsSL https://raw.githubusercontent.com/nullentropy/switchboard/main/install.sh | sh</code></pre>
+  <p>This downloads the latest release into <code>/Applications</code>.</p>
+  <h3>Linux</h3>
+  <pre><code>curl -fsSL https://raw.githubusercontent.com/nullentropy/switchboard/main/install.sh | sh</code></pre>
+  <p>This installs Switchboard in <code>~/.local</code> and adds it to your app launcher.</p>
+  <h3>Windows</h3>
+  <p>In PowerShell:</p>
+  <pre><code>irm https://raw.githubusercontent.com/nullentropy/switchboard/main/install.ps1 | iex</code></pre>
+  <p>This installs Switchboard in <code>%LOCALAPPDATA%\Programs\Switchboard</code> and adds it to the Start menu.</p>
+  <p class="links">
+    <a class="button" href="https://github.com/nullentropy/switchboard/releases/latest">Latest release</a>
+  </p>
+  <h3>Requirements</h3>
+  <ul>
+    <li>The <code>claude</code> CLI on your <code>PATH</code>, signed in. Switchboard will not start without it.</li>
+    <li><code>git</code> on your <code>PATH</code>.</li>
+    <li>Optional: the <code>codex</code> and <code>gemini</code> CLIs, for sessions that use those agents.</li>
+    <li>On Linux: an X11 or XWayland desktop with OpenGL and the ALSA library.</li>
+    <li>On Windows: <code>claude</code> from the native installer, so that <code>claude.exe</code> is on your <code>PATH</code>.</li>
+  </ul>
+</section>
+</main>
+</body>
+</html>

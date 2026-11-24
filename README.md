@@ -17,20 +17,13 @@ On every system:
 
 Each agent uses its own login, settings and instruction files.
 
-macOS:
-
-- macOS 13 Ventura or newer for a release build. An app built with
-  `scripts/app.sh` runs on the macOS version it was built on or newer.
-
 Linux:
 
-- A 64-bit x86 or ARM system with glibc 2.35 or newer, such as Ubuntu 22.04.
 - An X11 or XWayland desktop with OpenGL, and the ALSA library. On Debian
   and Ubuntu these come from `libgl1`, `libx11-6` and `libasound2`.
 
 Windows:
 
-- 64-bit Windows 10 or 11.
 - `claude` from the native installer, so that `claude.exe` is on your
   `PATH`. The npm package installs `claude.cmd`, which cannot pass the
   dispatcher its instructions.
@@ -53,12 +46,13 @@ curl -fsSL https://raw.githubusercontent.com/nullentropy/switchboard/main/instal
 ```
 
 This downloads the latest release into `/Applications`, replacing an existing
-`Switchboard.app` and quitting it first if it is running. curl does not mark
-the download as quarantined, so macOS opens the app without asking.
+`Switchboard.app` and quitting it first if it is running. Set
+`SWITCHBOARD_DEST` to install in another folder. curl does not mark the
+download as quarantined, so macOS opens the app without asking.
 
 Or install from a release zip by hand. Unzip
 `Switchboard-<version>-macos-universal.zip` and move `Switchboard.app` to
-Applications. The app runs on Apple silicon and Intel Macs.
+Applications.
 
 The app is ad hoc signed, not notarized. macOS quarantines a copy downloaded
 in a browser and will refuse to open it. Either right-click the app, choose
@@ -113,6 +107,8 @@ go run . -addr :8790     # serve the UI to a browser instead of a window
 
 Other flags: `-claude`, `-codex` and `-gemini` point at other binaries.
 `-state` sets where the session list and settings are kept.
+`-demo-sessions` sets how many pretend sessions `-demo` starts. The default
+is 7.
 
 ## Build the app
 
@@ -168,9 +164,9 @@ The working tree must be clean. Without an argument, HEAD must have a tag; a
 leading `v` is dropped. Each script builds from a clean checkout of HEAD and
 writes to `release/`.
 
-On macOS the script builds arm64 and amd64 binaries for macOS 13 or newer,
-joins them into one universal app, sets the version in its `Info.plist` and
-signs it ad hoc. macOS 13 is the oldest version Go 1.27 supports. On Linux it
+On macOS the script builds arm64 and amd64 binaries, joins them into one
+universal app, sets the version in its `Info.plist` and signs it ad hoc. On
+Linux it
 builds for the machine's architecture and packs the binary, desktop entry and
 icons. On Windows it builds `Switchboard.exe` with its icon and manifest.
 
@@ -187,7 +183,7 @@ press Ctrl where this table says Cmd.
 | `Cmd+N` | New session |
 | `Cmd+L` | Ask the dispatcher |
 | `J` `K` | Move between sessions |
-| `Enter` | Open the selected session, or write in the open one |
+| `Enter` | Open the selected session, write in the open one, or send the answers to a question |
 | `Cmd+1` to `Cmd+9` | Open a session by position |
 | `A` | Allow what the selected or first waiting session asks |
 | `Shift+A` | Always allow it for that session |
