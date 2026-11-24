@@ -63,6 +63,8 @@ func iconButton(glyph, tip string, fn func()) *caution.Node {
 	)
 }
 
+const tileRadius = 12.0
+
 func newTile(v *View, a *Agent) *tile {
 	t := &tile{v: v, a: a, state: -1}
 	open := func() { v.select_(a); v.openFocus(a) }
@@ -95,8 +97,8 @@ func newTile(v *View, a *Agent) *tile {
 		{Sep: true},
 		{Title: "Remove…", OnPick: func() { v.confirmRemove(a) }},
 	}
-	t.edge = caution.Panel().W(3).Anchor(caution.A{Left: px(0), Top: px(0), Bottom: px(0)})
-	t.node = caution.Panel().H(tileH).Bg("$panel").Radius(12).Border("$edgeSoft", 1).Clips().
+	t.edge = caution.Panel().W(3)
+	t.node = caution.Panel().H(tileH).Bg("$panel").Radius(tileRadius).Border("$edgeSoft", 1).Clips().
 		Kids(caution.Glass().HoverFill("$hover").Anchor(fill()).OnPick(func(_, _ float64, _ *caution.Node) { open() }), t.edge, content).
 		Context(ctx...)
 
@@ -529,27 +531,27 @@ func elapsed(d time.Duration) string {
 }
 
 func (t *tile) restyle() {
-	bg, edge := "$panel", "$panel"
-	switch t.state {
-	case Working, Starting:
+	bg := "$panel"
+	if t.state == Working || t.state == Starting {
 		bg = "$workBg"
-	case Failed:
+	}
+	edge := bg
+	if t.state == Failed {
 		edge = "$stFail"
 	}
 	t.node.Bg(bg)
-	t.edge.Bg(edge)
 	title := "$ink"
 	if t.state == Ready || t.state == Stopped {
 		title = "$inkDim"
 	}
 	t.title.SetColor(title)
+	border, bw := "$edgeSoft", 1.0
 	if t.selected {
-		t.node.Border("$accent", 2)
-		t.mini.Border("$accent", 2)
-	} else {
-		t.node.Border("$edgeSoft", 1)
-		t.mini.Border("$edgeSoft", 1)
+		border, bw = "$accent", 2.0
 	}
+	t.node.Border(border, bw)
+	t.mini.Border(border, bw)
+	t.edge.Bg(edge).Anchor(caution.A{Left: px(bw), Top: px(tileRadius), Bottom: px(tileRadius)})
 	if t.bar != nil {
 		t.bar.Remove()
 		t.bar = nil
@@ -557,7 +559,7 @@ func (t *tile) restyle() {
 	if t.state == Working || t.state == Starting {
 		r, g, b := tokenRGB(t.v.set, "stWork")
 		t.bar = caution.Shader(caution.FX{Frag: barFrag, Animate: true, Uniforms: map[string]float64{"tintR": r, "tintG": g, "tintB": b}}).H(2).
-			Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)})
+			Anchor(caution.A{Left: px(tileRadius), Right: px(tileRadius), Top: px(bw)})
 		t.node.Add(t.bar)
 	}
 }
