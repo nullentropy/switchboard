@@ -44,6 +44,7 @@ type focusView struct {
 	ctxUsed    int
 	ctxWindow  int
 	activityFX glint
+	busy       *busyAnim
 	cleared    int
 	queued     string
 	editing    int
@@ -150,9 +151,11 @@ func (f *focusView) build() {
 		Anchor(caution.A{Left: px(0), Right: px(0), CenterY: px(0)})
 	f.activityFX.n = f.activity
 	f.clock = caution.Label("").FontSize(12).Color("$inkFaint")
+	actBox := caution.Panel().Fill(1).H(30).Clips().Kids(f.activity)
+	f.busy = newBusy(f, actBox)
 	f.statusBar = caution.Panel().Dock("bottom").H(30).Bg("$panelAlt").Clips().Kids(
 		caution.HStack().Gap(20).Align("center").Anchor(caution.A{Left: px(24), Right: px(24), CenterY: px(0)}).Kids(
-			caution.Panel().Fill(1).H(30).Clips().Kids(f.activity),
+			actBox,
 			hints([][2]string{{"Esc", "leave the message box"}, {"J K", "switch"}, {"Esc Esc", "all sessions"}}), f.clock))
 
 	f.composer = caution.Textarea("").Placeholder(f.hint()).Rows(2).EnterSends().
@@ -358,6 +361,7 @@ func (f *focusView) update(s Snapshot) {
 	}
 	f.activity.SetText(act)
 	f.activityFX.set(f.v.set, act, 12, true, thinking(s))
+	f.busy.set(s)
 	f.activity.SetColor(map[bool]string{true: tok, false: "$inkDim"}[s.State == NeedsYou || s.State == Failed || s.State == Interrupted])
 
 	if s.Cleared != f.cleared {
