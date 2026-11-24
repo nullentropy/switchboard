@@ -21,6 +21,7 @@ type Settings struct {
 	WindowW   int                          `json:"windowW,omitempty"`
 	WindowH   int                          `json:"windowH,omitempty"`
 	Maximized bool                         `json:"maximized,omitempty"`
+	SidebarW  int                          `json:"sidebarW,omitempty"`
 	LastCwd   string                       `json:"lastCwd"`
 	Themes    map[string]map[string]string `json:"themes,omitempty"`
 }

@@ -341,6 +341,8 @@ func (v *View) bindKeys() {
 	for _, k := range []string{"enter", "o"} {
 		s.OnKey(k, func() {
 			switch {
+			case v.askSend != nil:
+				v.askSend()
 			case v.focus != nil:
 				v.focus.composer.Focus()
 			case v.sel != nil:
@@ -657,7 +659,7 @@ func (v *View) openShortcuts() {
 		Anchor(caution.A{Left: px(24), Right: px(24), Top: px(18)})
 	for _, h := range [][2]string{
 		{modLabel + "K", "Commands: every action and session"}, {modLabel + "N", "New session"}, {modLabel + "L", "Ask the dispatcher"},
-		{"J  K", "Move between sessions"}, {"Enter", "Open the selected session, or write in the open one"}, {modLabel + "1 … " + modLabel + "9", "Open a session by position"},
+		{"J  K", "Move between sessions"}, {"Enter", "Open the selected session, write in the open one, or send the answers to a question"}, {modLabel + "1 … " + modLabel + "9", "Open a session by position"},
 		{"A", "Allow what the selected or first waiting session asks"}, {shiftLabel + "A", "Always allow it for that session"},
 		{"D", "Deny it"}, {modLabel + "J", "Jump to the next session that needs you"}, {".", "Interrupt the turn"},
 		{"R", "Rename"}, {modLabel + backspaceLabel, "Remove"}, {"Esc", "Leave the message box, then back to all sessions"}, {modLabel + ",", "Settings"},

@@ -124,6 +124,10 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 	case "system":
 		switch sub {
 		case "init":
+			if a == a.hub.Dispatcher {
+				id, _ := m["session_id"].(string)
+				a.adoptSession(id)
+			}
 			a.live()
 			return true
 		case "thinking_tokens":
@@ -133,6 +137,12 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 			}
 		}
 		return false
+	case "conversation_reset":
+		if a != a.hub.Dispatcher {
+			return false
+		}
+		a.clearConversation()
+		return true
 	case "rate_limit_event":
 		claudeLimits(a.hub, m)
 		return false

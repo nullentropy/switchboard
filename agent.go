@@ -161,6 +161,8 @@ type Agent struct {
 	turn               string
 	marks              []Mark
 	note               string
+	cleared            int
+	resetting          bool
 }
 
 type Mark struct {
@@ -191,6 +193,7 @@ type Snapshot struct {
 	Marks     []Mark
 	CtxUsed   int
 	CtxWindow int
+	Cleared   int
 }
 
 func newID() string {
@@ -254,6 +257,25 @@ func (a *Agent) Snapshot() Snapshot {
 		Entries: append([]Entry(nil), a.Entries...), Pending: append([]*Pending(nil), a.Pending...),
 		Cost: a.Cost, TurnFrom: a.TurnFrom, Err: a.Err, Station: a.station, Subs: a.subList(),
 		Marks: append([]Mark(nil), a.marks...), CtxUsed: a.ctxUsed, CtxWindow: a.ctxWindow,
+		Cleared: a.cleared,
+	}
+}
+
+func (a *Agent) clearConversation() {
+	a.Entries = nil
+	a.toolIdx = map[string]int{}
+	a.cleared++
+	a.resetting = true
+}
+
+func (a *Agent) adoptSession(id string) {
+	if !a.resetting || id == "" {
+		return
+	}
+	a.resetting = false
+	if id != a.Meta.ID {
+		a.Meta.ID = id
+		go a.hub.save()
 	}
 }
 

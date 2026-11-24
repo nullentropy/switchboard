@@ -42,6 +42,7 @@ type View struct {
 	stats                      map[string]*caution.Node
 	console                    *caution.Node
 	dDot, dLine, dActions, cmd *caution.Node
+	dStatus                    *caution.Node
 	tiles                      map[*Agent]*tile
 	order, shown               []*Agent
 	sel                        *Agent
@@ -56,6 +57,7 @@ type View struct {
 	limitsBox                  *caution.Node
 	rows                       map[*Agent]*railRow
 	dialog                     *caution.Node
+	askSend                    func()
 	cols                       int
 	set                        Settings
 	dPend                      string
@@ -191,6 +193,7 @@ func (v *View) build() *caution.Node {
 	v.updateDispatcher(v.hub.Dispatcher.Snapshot())
 
 	s.OnResize(func(w, h float64) {
+		v.fitConsole(w, h)
 		if c := colsFor(w, h); c != v.cols {
 			v.cols = c
 			for _, sec := range v.sections {
@@ -237,8 +240,13 @@ func abs(x float64) float64 {
 func (v *View) buildConsole() *caution.Node {
 	d := v.hub.Dispatcher
 	v.dDot = caution.Panel().W(8).H(8).Radius(4)
-	v.dLine = caution.Label("").FontSize(12).Color("$inkDim").Fill(1)
+	v.dLine = caution.Label("").FontSize(12).Color("$inkDim").Anchor(caution.A{Left: px(0), Right: px(0), CenterY: px(0)})
 	v.dActions = caution.HStack().Gap(6).Align("center")
+	v.dStatus = caution.HStack().Gap(8).Align("center").W(statusW).Clips().
+		Kids(v.dDot, caution.Panel().Fill(1).H(consoleH).Clips().Kids(v.dLine), v.dActions)
+	if v.s != nil {
+		v.fitConsole(v.s.Viewport())
+	}
 	v.cmd = caution.TextField("").Placeholder("Ask the dispatcher to start, steer or report on sessions, or to run a goal as a swarm")
 	v.cmd.OnSubmit(func(text string) {
 		if strings.TrimSpace(text) == "" {
@@ -247,14 +255,19 @@ func (v *View) buildConsole() *caution.Node {
 		v.cmd.ClearValue()
 		go d.Send(text)
 	})
-	return caution.Panel().Dock("bottom").H(consoleH).Bg("$titlebar").Kids(
+	return caution.Panel().Dock("bottom").H(consoleH).Bg("$titlebar").Clips().Kids(
 		caution.Panel().H(1).Bg("$edgeSoft").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)}),
-		caution.HStack().Gap(10).Align("center").Anchor(caution.A{Left: px(16), Right: px(statusW + 28), CenterY: px(0)}).Kids(
+		caution.HStack().Gap(10).Align("center").Anchor(caution.A{Left: px(16), Right: px(16), CenterY: px(0)}).Kids(
 			icon(icSparkles, 16, "$accent"), v.cmd.Fill(1), kbd(modLabel+"L"), caution.Panel().W(8),
-			caution.Button("Shortcuts  ?").Tip("Every keyboard shortcut").OnClick(v.openShortcuts)),
-		caution.HStack().Gap(8).Align("center").W(statusW).Anchor(caution.A{Right: px(16), CenterY: px(0)}).
-			Kids(v.dDot, v.dLine, v.dActions),
+			caution.Button(shortcutsLabel).Tip("Every keyboard shortcut").OnClick(v.openShortcuts), v.dStatus),
 	)
+}
+
+const shortcutsLabel = "Shortcuts  ?"
+
+func (v *View) fitConsole(w, _ float64) {
+	help := 16 + 16 + 10 + 10 + textW(modLabel+"L", 10, true) + 10 + 10 + 8 + 10 + textW(shortcutsLabel, 13, false) + 2*16 + 10 + 16
+	v.dStatus.W(min(statusW, max(0, w-help)))
 }
 
 func (v *View) focusCommand() {
@@ -289,7 +302,7 @@ func (v *View) updateDispatcher(s Snapshot) {
 		p := s.Pending[0]
 		line, color = strings.TrimSpace("Dispatcher wants "+p.Tool+" "+p.Summary), "$stNeed"
 	}
-	v.dLine.SetText(clip(line, 40)).SetColor(color).Tip(line)
+	v.dLine.SetText(strings.Join(strings.Fields(line), " ")).SetColor(color).Tip(line)
 
 	key := ""
 	if len(s.Pending) > 0 {
@@ -484,6 +497,7 @@ func (v *View) tick() {
 }
 
 func (v *View) closeDialog() {
+	v.askSend = nil
 	if v.dialog != nil {
 		v.dialog.Remove()
 		v.dialog = nil

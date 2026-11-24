@@ -26,6 +26,7 @@ type focusView struct {
 	a *Agent
 
 	node, title, stateL, sub, list, scroll, card, activity, clock, statusBar, bar, composer *caution.Node
+	note, noteBar                                                                           *caution.Node
 	icon                                                                                    *stateMark
 	modeSel                                                                                 *caution.Node
 
@@ -41,6 +42,7 @@ type focusView struct {
 	ctxUsed    int
 	ctxWindow  int
 	activityFX glint
+	cleared    int
 }
 
 type userRow struct {
@@ -137,24 +139,25 @@ func (f *focusView) build() {
 	f.card = caution.Panel().Dock("bottom").H(0).Bg("$needBg").Clips()
 
 	f.activity = caution.Label("").FontSize(12).Mono().Color("$inkDim").
-		Anchor(caution.A{Left: px(24), Right: px(520), CenterY: px(0)})
+		Anchor(caution.A{Left: px(0), Right: px(0), CenterY: px(0)})
 	f.activityFX.n = f.activity
 	f.clock = caution.Label("").FontSize(12).Color("$inkFaint")
-	f.statusBar = caution.Panel().Dock("bottom").H(30).Bg("$panelAlt").Clips().Kids(f.activity,
-		caution.HStack().Gap(20).Align("center").Anchor(caution.A{Right: px(24), CenterY: px(0)}).Kids(
+	f.statusBar = caution.Panel().Dock("bottom").H(30).Bg("$panelAlt").Clips().Kids(
+		caution.HStack().Gap(20).Align("center").Anchor(caution.A{Left: px(24), Right: px(24), CenterY: px(0)}).Kids(
+			caution.Panel().Fill(1).H(30).Clips().Kids(f.activity),
 			hints([][2]string{{"Esc", "leave the message box"}, {"J K", "switch"}, {"Esc Esc", "all sessions"}}), f.clock))
 
 	f.composer = caution.Textarea("").Placeholder(f.hint()).Rows(2).EnterSends().
 		Anchor(caution.A{Left: px(20), Right: px(120), Top: px(14), Bottom: px(14)})
 	f.mention = newMentions(f)
-	f.composer.OnInput(f.mention.input)
-	f.composer.OnTab(f.mention.tab)
-	f.composer.OnSubmit(func(s string) {
-		if f.mention.tab(false, s, -1) {
-			return
-		}
-		f.send(s)
+	f.composer.OnInput(func(s string) {
+		f.say("")
+		f.mention.input(s)
 	})
+	f.composer.OnTab(f.mention.tab)
+	f.composer.OnSubmit(f.submit)
+	f.note = caution.Label("").FontSize(12).Color("$stNeed").Anchor(caution.A{Left: px(24), Right: px(24), CenterY: px(0)})
+	f.noteBar = caution.Panel().Dock("bottom").H(0).Bg("$panel").Clips().Kids(f.note)
 	compose := caution.Panel().Dock("bottom").H(84).Bg("$panel").Kids(
 		f.composer,
 		caution.Button("Send").Primary().W(84).Anchor(caution.A{Right: px(20), CenterY: px(0)}).
@@ -166,6 +169,7 @@ func (f *focusView) build() {
 		caution.Panel().Dock("top").H(1).Bg("$edgeSoft"),
 		compose,
 		f.mention.panel,
+		f.noteBar,
 		caution.Panel().Dock("bottom").H(1).Bg("$edgeSoft"),
 		f.statusBar,
 		f.card,
@@ -174,13 +178,30 @@ func (f *focusView) build() {
 	f.node = caution.Panel().Bg("$bg").Anchor(fill()).Kids(dock)
 }
 
+func (f *focusView) submit(s string) {
+	if f.mention.tab(false, s, -1) {
+		return
+	}
+	f.send(s)
+}
+
 func (f *focusView) send(text string) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
 	f.composer.ClearValue()
-	f.mention.show(nil)
+	f.mention.input("")
+	if w := strings.Fields(text); w[0] == "/clear" && f.a != f.v.hub.Dispatcher {
+		f.say("/clear is only available in the dispatcher. Clearing a session would drop the context it needs to finish its task.")
+		return
+	}
+	f.say("")
 	go f.a.Send(text)
+}
+
+func (f *focusView) say(text string) {
+	f.note.SetText(text)
+	f.noteBar.H(map[bool]float64{true: 0, false: 28}[text == ""])
 }
 
 func (f *focusView) update(s Snapshot) {
@@ -216,6 +237,11 @@ func (f *focusView) update(s Snapshot) {
 	f.activityFX.set(f.v.set, act, 12, true, thinking(s))
 	f.activity.SetColor(map[bool]string{true: tok, false: "$inkDim"}[s.State == NeedsYou || s.State == Failed || s.State == Interrupted])
 
+	if s.Cleared != f.cleared {
+		f.cleared = s.Cleared
+		f.list.Clear()
+		f.shown, f.run = nil, nil
+	}
 	for i, e := range s.Entries {
 		if i >= len(f.shown) {
 			f.shown = append(f.shown, f.addEntry(e))
@@ -569,93 +595,144 @@ func (f *focusView) ask(p *Pending) {
 		return
 	}
 
-	answers := map[string]string{}
-	var finishers []func()
-	quick := len(p.Questions) == 1 && !p.Questions[0].MultiSelect
-	form := caution.VStack().Gap(10).Align("stretch").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)})
+	form := newAskForm(p.Questions, func(answers map[string]string) {
+		v.closeDialog()
+		a.Answer(p.ReqID, true, false, answers)
+	})
+	send := caution.Button("Answer  Enter")
+	var allCards [][]*optionCard
+	var fields []*caution.Node
+	form.onClearText = func(qi int) { fields[qi].SetValueNow("") }
+	form.onChange = func() {
+		for qi, cards := range allCards {
+			for _, c := range cards {
+				c.set(form.picked(qi, c.label))
+			}
+		}
+		send.SetProp("primary", form.ready())
+	}
+	list := caution.VStack().Gap(10).Align("stretch").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)})
 	h := 120.0
 	for qi, q := range p.Questions {
 		if qi > 0 {
-			form.Add(caution.Panel().H(8))
+			list.Add(caution.Panel().H(8))
 			h += 18
 		}
 		if q.Header != "" {
-			form.Add(caution.Label(strings.ToUpper(q.Header)).FontSize(11).Weight(650).Color("$inkFaint"))
+			list.Add(caution.Label(strings.ToUpper(q.Header)).FontSize(11).Weight(650).Color("$inkFaint"))
 			h += 24
 		}
-		form.Add(caution.Label(q.Question).FontSize(14).Weight(600).Wrap())
+		list.Add(caution.Label(q.Question).FontSize(14).Weight(600).Wrap())
 		h += float64(len(wrapLines(q.Question, 14, askTextW+40)))*20 + 10
-		picked := map[string]bool{}
 		var cards []*optionCard
-		qtext := q.Question
 		for _, o := range q.Options {
 			c := newOptionCard(o, q.MultiSelect)
 			cards = append(cards, c)
-			label := o.Label
-			c.onPick = func() {
-				if q.MultiSelect {
-					picked[label] = !picked[label]
-					c.set(picked[label])
-					return
-				}
-				for k := range picked {
-					delete(picked, k)
-				}
-				picked[label] = true
-				for _, other := range cards {
-					other.set(other.label == label)
-				}
-				if quick {
-					v.closeDialog()
-					a.Answer(p.ReqID, true, false, map[string]string{qtext: label})
-				}
-			}
-			form.Add(c.node)
+			c.onPick = func() { form.pick(qi, c.label) }
+			list.Add(c.node)
 			h += c.h + 10
 		}
+		allCards = append(allCards, cards)
 		other := caution.TextField("").Placeholder("Or type an answer")
-		other.OnInput(func(string) {})
-		form.Add(other)
+		other.OnInput(func(s string) { form.typed(qi, s) })
+		other.OnSubmit(func(string) { form.submit() })
+		fields = append(fields, other)
+		list.Add(other)
 		h += 40
-		finish := func() {
-			if x := strings.TrimSpace(valueOf(other)); x != "" {
-				answers[qtext] = x
-				return
-			}
-			var sel []string
-			for _, o := range q.Options {
-				if picked[o.Label] {
-					sel = append(sel, o.Label)
-				}
-			}
-			if len(sel) > 0 {
-				answers[qtext] = strings.Join(sel, ", ")
-			}
-		}
-		other.OnSubmit(func(string) {
-			finish()
-			if len(answers) == len(p.Questions) {
-				v.closeDialog()
-				a.Answer(p.ReqID, true, false, answers)
-			}
-		})
-		finishers = append(finishers, finish)
 	}
-	submit := func() {
-		for _, fn := range finishers {
-			fn()
-		}
-		v.closeDialog()
-		a.Answer(p.ReqID, true, false, answers)
-	}
+	send.OnClick(form.submit)
 	d := caution.Dialog(f.name()+" is asking").CardSize(askW, min(h, 680)).Kids(
-		caution.Scroll().Anchor(caution.A{Left: px(20), Right: px(20), Top: px(12), Bottom: px(64)}).Kids(form),
+		caution.Scroll().Anchor(caution.A{Left: px(20), Right: px(20), Top: px(12), Bottom: px(64)}).Kids(list),
 		caution.HStack().Gap(8).Anchor(caution.A{Right: px(20), Bottom: px(18)}).Kids(
 			caution.Button("Skip").Tip("Decline to answer").OnClick(func() { v.closeDialog(); a.Answer(p.ReqID, false, false, nil) }),
-			caution.Button("Submit").Primary().OnClick(submit),
+			send,
 		),
 	)
 	v.showDialog(d)
+	v.askSend = form.submit
+}
+
+type askForm struct {
+	qs          []Question
+	sel         []map[string]bool
+	text        []string
+	send        func(map[string]string)
+	sent        bool
+	onClearText func(int)
+	onChange    func()
+}
+
+func newAskForm(qs []Question, send func(map[string]string)) *askForm {
+	f := &askForm{qs: qs, send: send, text: make([]string, len(qs))}
+	for range qs {
+		f.sel = append(f.sel, map[string]bool{})
+	}
+	return f
+}
+
+func (f *askForm) pick(qi int, label string) {
+	if f.text[qi] != "" {
+		f.text[qi] = ""
+		if f.onClearText != nil {
+			f.onClearText(qi)
+		}
+	}
+	if f.qs[qi].MultiSelect {
+		f.sel[qi][label] = !f.sel[qi][label]
+	} else {
+		f.sel[qi] = map[string]bool{label: true}
+	}
+	f.changed()
+}
+
+func (f *askForm) typed(qi int, s string) {
+	f.text[qi] = s
+	if strings.TrimSpace(s) != "" {
+		f.sel[qi] = map[string]bool{}
+	}
+	f.changed()
+}
+
+func (f *askForm) picked(qi int, label string) bool { return f.sel[qi][label] }
+
+func (f *askForm) answer(qi int) string {
+	if x := strings.TrimSpace(f.text[qi]); x != "" {
+		return x
+	}
+	var sel []string
+	for _, o := range f.qs[qi].Options {
+		if f.sel[qi][o.Label] {
+			sel = append(sel, o.Label)
+		}
+	}
+	return strings.Join(sel, ", ")
+}
+
+func (f *askForm) ready() bool {
+	for qi := range f.qs {
+		if f.answer(qi) == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func (f *askForm) submit() {
+	if f.sent || !f.ready() {
+		return
+	}
+	f.sent = true
+	answers := map[string]string{}
+	for qi, q := range f.qs {
+		answers[q.Question] = f.answer(qi)
+	}
+	f.send(answers)
+}
+
+func (f *askForm) changed() {
+	if f.onChange != nil {
+		f.onChange()
+	}
 }
 
 func (f *focusView) restyle() {

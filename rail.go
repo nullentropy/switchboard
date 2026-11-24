@@ -16,14 +16,42 @@ func (v *View) buildShell() {
 	v.railList = caution.VStack().Gap(2).Pad(8).Align("stretch").
 		Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)})
 	v.rows = map[*Agent]*railRow{}
-	v.holder = caution.Panel().Anchor(caution.A{Left: px(265), Right: px(0), Top: px(0), Bottom: px(0)})
+	v.holder = caution.Panel()
+	split := caution.HSplit().Anchor(fill()).
+		SplitPos(sidebarWidth(float64(v.set.SidebarW))).SplitMin(sidebarMin, mainMin)
+	split.OnSplitResize(func(pos float64) { v.resizeSidebar(split, pos) })
 	v.shell = caution.Panel().Bg("$bg").Anchor(fill()).Kids(
-		caution.Panel().Bg("$panelAlt").Anchor(caution.A{Left: px(0), Top: px(0), Bottom: px(0)}).W(264).Kids(
-			caution.Scroll().NoFade().Anchor(fill()).Kids(v.railList),
+		caution.Glass().Anchor(fill()).OnPick(func(_, _ float64, _ *caution.Node) {}),
+		split.Kids(
+			caution.Panel().Bg("$panelAlt").Kids(
+				caution.Scroll().NoFade().Anchor(fill()).Kids(v.railList),
+				caution.Panel().Bg("$edgeSoft").Anchor(caution.A{Right: px(0), Top: px(0), Bottom: px(0)}).W(1),
+			),
+			v.holder,
 		),
-		caution.Panel().Bg("$edgeSoft").Anchor(caution.A{Left: px(264), Top: px(0), Bottom: px(0)}).W(1),
-		v.holder,
 	)
+}
+
+const (
+	sidebarDefault = 264.0
+	sidebarMin     = 200.0
+	sidebarMax     = 480.0
+	mainMin        = 420.0
+)
+
+func sidebarWidth(w float64) float64 {
+	if w <= 0 {
+		return sidebarDefault
+	}
+	return min(max(w, sidebarMin), sidebarMax)
+}
+
+func (v *View) resizeSidebar(split *caution.Node, pos float64) {
+	w := sidebarWidth(pos)
+	if w != pos {
+		split.SplitPos(w)
+	}
+	go v.hub.UpdateSettings(func(s *Settings) { s.SidebarW = int(w) })
 }
 
 func (v *View) layoutRail() {
