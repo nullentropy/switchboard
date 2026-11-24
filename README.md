@@ -55,8 +55,9 @@ Or install from a release zip by hand. Unzip
 Applications.
 
 The app is ad hoc signed, not notarized. macOS quarantines a copy downloaded
-in a browser and will refuse to open it. Either right-click the app, choose
-Open, and confirm, or clear the quarantine flag:
+in a browser and will refuse to open it. Either try to open it once, then go
+to System Settings > Privacy & Security and choose Open Anyway, or clear the
+quarantine flag:
 
 ```
 xattr -dr com.apple.quarantine /Applications/Switchboard.app
