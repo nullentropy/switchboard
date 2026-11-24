@@ -1,4 +1,4 @@
-# Switchboard
+# [Switchboard](https://nullentropy.github.io/switchboard/)
 
 Switchboard is an app that runs your coding agent sessions side by side.
 Each session is a tile that shows what its agent is doing and asks you when it
