@@ -48,7 +48,7 @@ func (v *View) buildBoard() *caution.Node {
 			caution.Panel().Fill(1),
 		)
 		if s.inbox {
-			s.head.Add(hints([][2]string{{"A", "allow"}, {"D", "deny"}, {shiftLabel + "A", "always"}, {modLabel + "J", "next"}, {"Enter", "open"}}))
+			s.head.Add(hints([][2]string{{"A  " + modLabel + "Y", "allow"}, {"D  " + shiftLabel + modLabel + "D", "deny"}, {shiftLabel + "A  " + shiftLabel + modLabel + "Y", "always"}, {modLabel + "J", "next"}, {"Enter", "open"}}))
 		}
 		switch {
 		case s.inbox:
@@ -367,6 +367,9 @@ func (v *View) bindKeys() {
 	s.OnKey("a", func() { v.answer(true, false) })
 	s.OnKey("shift+a", func() { v.answer(true, true) })
 	s.OnKey("d", func() { v.answer(false, false) })
+	s.OnKey(modKey+"+y", func() { v.answer(true, false) })
+	s.OnKey(modKey+"+shift+y", func() { v.answer(true, true) })
+	s.OnKey(modKey+"+shift+d", func() { v.answer(false, false) })
 	s.OnKey(".", func() {
 		if a := v.target(); a != nil {
 			a.Interrupt()
@@ -462,8 +465,8 @@ func (v *View) paletteItems() []paletteItem {
 		title := a.Snapshot().Meta.Title
 		g := "On " + title
 		items = append(items,
-			paletteItem{"Allow what it asks", "A", icCheck, func() { v.answer(true, false) }, g},
-			paletteItem{"Deny what it asks", "D", icFail, func() { v.answer(false, false) }, g},
+			paletteItem{"Allow what it asks", "A  " + modLabel + "Y", icCheck, func() { v.answer(true, false) }, g},
+			paletteItem{"Deny what it asks", "D  " + shiftLabel + modLabel + "D", icFail, func() { v.answer(false, false) }, g},
 			paletteItem{"Interrupt the turn", modLabel + ".", icPause, a.Interrupt, g},
 			paletteItem{"Rename", "R", icCircle, func() { v.openRename(a) }, g},
 			paletteItem{"End the session", "", icCircle, func() { v.confirmEnd(a) }, g},
@@ -676,8 +679,8 @@ func (v *View) openShortcuts() {
 	for _, h := range [][2]string{
 		{modLabel + "K", "Commands: every action and session"}, {modLabel + "N", "New session"}, {modLabel + "L", "Ask the dispatcher"},
 		{"J  K", "Move between sessions"}, {"Enter", "Open the selected session, write in the open one, or send the answers to a question"}, {modLabel + "1 … " + modLabel + "9", "Open a session by position"},
-		{"A", "Allow what the selected or first waiting session asks"}, {shiftLabel + "A", "Always allow it for that session"},
-		{"D", "Deny it"}, {modLabel + "J", "Jump to the next session that needs you"}, {".", "Interrupt the turn"},
+		{"A  " + modLabel + "Y", "Allow what the selected or first waiting session asks"}, {shiftLabel + "A  " + shiftLabel + modLabel + "Y", "Always allow it for that session"},
+		{"D  " + shiftLabel + modLabel + "D", "Deny it"}, {modLabel + "J", "Jump to the next session that needs you"}, {".", "Interrupt the turn"},
 		{modLabel + "E", "Edit the newest pending message"}, {shiftLabel + modLabel + "E", "Interrupt and send pending messages now"},
 		{"R", "Rename"}, {modLabel + backspaceLabel, "Remove"}, {"Esc", "Leave the message box, then back to all sessions"}, {modLabel + ",", "Settings"},
 	} {

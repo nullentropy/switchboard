@@ -186,9 +186,9 @@ press Ctrl where this table says Cmd.
 | `J` `K` | Move between sessions |
 | `Enter` | Open the selected session, write in the open one, or send the answers to a question |
 | `Cmd+1` to `Cmd+9` | Open a session by position |
-| `A` | Allow what the selected or first waiting session asks |
-| `Shift+A` | Always allow it for that session |
-| `D` | Deny it |
+| `A` or `Cmd+Y` | Allow what the selected or first waiting session asks |
+| `Shift+A` or `Cmd+Shift+Y` | Always allow it for that session |
+| `D` or `Cmd+Shift+D` | Deny it |
 | `Cmd+J` | Jump to the next session that needs you |
 | `.` | Interrupt the turn |
 | `Cmd+E` | Edit the newest pending message |
