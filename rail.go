@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 
 	caution "github.com/nullentropy/caution"
@@ -185,6 +186,17 @@ func railStep(disp *Agent, sessions []*Agent, cur *Agent, d int) *Agent {
 		}
 	}
 	return nil
+}
+
+func afterRemoval(disp *Agent, sessions []*Agent, removed *Agent) *Agent {
+	i := slices.Index(sessions, removed)
+	switch {
+	case i >= 0 && i+1 < len(sessions):
+		return sessions[i+1]
+	case i > 0:
+		return sessions[i-1]
+	}
+	return disp
 }
 
 func (v *View) railFilter() *caution.Node {

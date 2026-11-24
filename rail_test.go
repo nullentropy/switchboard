@@ -105,3 +105,23 @@ func TestShowAllInTheSessionListClearsTheFilter(t *testing.T) {
 		t.Fatal("the filter bar is still shown with no filter on")
 	}
 }
+
+func TestRemovingTheOpenSessionOpensItsNeighbourInTheSessionList(t *testing.T) {
+	d, one, two, three := &Agent{}, &Agent{}, &Agent{}, &Agent{}
+	name := map[*Agent]string{d: "dispatcher", one: "Ford", two: "Zaphod", three: "Trillian"}
+	cases := []struct {
+		sessions []*Agent
+		removed  *Agent
+		want     *Agent
+	}{
+		{[]*Agent{one, two, three}, two, three},
+		{[]*Agent{one, two, three}, three, two},
+		{[]*Agent{one, two, three}, one, two},
+		{[]*Agent{one}, one, d},
+	}
+	for _, c := range cases {
+		if got := afterRemoval(d, c.sessions, c.removed); got != c.want {
+			t.Errorf("removing %s: got %s, want %s", name[c.removed], name[got], name[c.want])
+		}
+	}
+}
