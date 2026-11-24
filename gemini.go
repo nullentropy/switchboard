@@ -326,7 +326,7 @@ func (d *geminiDriver) finish(a *Agent, id string, up map[string]any) bool {
 	return a.toolEnd(id, geminiContent(up), status == "failed")
 }
 
-func (d *geminiDriver) answer(a *Agent, pd *Pending, allow, always bool, _ map[string]string) {
+func (d *geminiDriver) answer(a *Agent, pd *Pending, allow, always bool, _ map[string]string, _ string) {
 	ask, _ := pd.raw.(*geminiAsk)
 	p := a.proc()
 	if ask == nil || p == nil {

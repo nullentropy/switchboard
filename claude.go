@@ -60,7 +60,7 @@ func (claudeDriver) setMode(a *Agent, mode string) {
 	claudeControl(a, map[string]any{"subtype": "set_permission_mode", "mode": mode})
 }
 
-func (claudeDriver) answer(a *Agent, p *Pending, allow, always bool, answers map[string]string) {
+func (claudeDriver) answer(a *Agent, p *Pending, allow, always bool, answers map[string]string, reason string) {
 	var resp map[string]any
 	if allow {
 		input := p.Input
@@ -87,7 +87,10 @@ func (claudeDriver) answer(a *Agent, p *Pending, allow, always bool, answers map
 			resp["updatedPermissions"] = perms
 		}
 	} else {
-		resp = map[string]any{"behavior": "deny", "message": "The user declined this."}
+		if reason == "" {
+			reason = "The user declined this."
+		}
+		resp = map[string]any{"behavior": "deny", "message": reason}
 	}
 	if pr := a.proc(); pr != nil {
 		_ = pr.writeJSON(map[string]any{"type": "control_response", "response": map[string]any{

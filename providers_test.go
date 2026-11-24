@@ -98,7 +98,7 @@ func fakeClaude() {
 		f.write(map[string]any{"type": "user", "message": map[string]any{"content": []any{
 			map[string]any{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}}}})
 		f.write(map[string]any{"type": "assistant", "message": map[string]any{"content": []any{
-			map[string]any{"type": "text", "text": fmt.Sprint("decision ", inner["behavior"])}}}})
+			map[string]any{"type": "text", "text": strings.TrimSuffix(fmt.Sprint("decision ", inner["behavior"], ": ", inner["message"]), ": <nil>")}}}})
 		f.write(map[string]any{"type": "result", "subtype": "success", "total_cost_usd": 0.25})
 	}
 }
@@ -215,6 +215,29 @@ func TestEveryProviderAsksBeforeACommandAndCarriesTheAnswerBack(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAMessageSentOverAPendingApprovalDeniesItWithThatMessageAndCarriesOn(t *testing.T) {
+	t.Setenv("SWITCHBOARD_FAKE", "claude")
+	self, _ := os.Executable()
+	h := newHub(map[string]string{"claude": self}, "")
+	a, _ := h.New(Meta{Cwd: t.TempDir(), Mode: "default"}, false)
+	defer a.Stop()
+	go a.Send("run the tests on the Heart of Gold")
+	waitFor(t, a, "waiting on the user", func(s Snapshot) bool { return s.State == NeedsYou })
+
+	go a.Send("Don't panic, ask Marvin instead")
+
+	denied := func(s Snapshot) bool {
+		for _, e := range s.Entries {
+			if e.Kind == EntryAssistant && strings.HasPrefix(e.Text, "decision deny") && strings.Contains(e.Text, "Don't panic, ask Marvin instead") {
+				return true
+			}
+		}
+		return false
+	}
+	waitFor(t, a, "the approval denied with the new message", denied)
+	waitFor(t, a, "the new message reaching the agent", func(s Snapshot) bool { return s.State == NeedsYou && len(s.Pending) == 1 })
 }
 
 func TestAnAppOpenedFromFinderFindsAgentsOnTheLoginShellsPath(t *testing.T) {

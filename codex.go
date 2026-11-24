@@ -363,7 +363,7 @@ func (d *codexDriver) request(a *Agent, p *proc, msg rpcMsg, params map[string]a
 	a.event(func() bool { a.ask(pd); return true })
 }
 
-func (d *codexDriver) answer(a *Agent, pd *Pending, allow, always bool, answers map[string]string) {
+func (d *codexDriver) answer(a *Agent, pd *Pending, allow, always bool, answers map[string]string, reason string) {
 	ask, _ := pd.raw.(*codexAsk)
 	p := a.proc()
 	if ask == nil || p == nil {
@@ -381,7 +381,10 @@ func (d *codexDriver) answer(a *Agent, pd *Pending, allow, always bool, answers 
 		}
 		result = map[string]any{"decision": dec}
 	case "execCommandApproval", "applyPatchApproval":
-		var dec any = map[string]any{"denied": map[string]any{"rejection": "The user declined this."}}
+		if reason == "" {
+			reason = "The user declined this."
+		}
+		var dec any = map[string]any{"denied": map[string]any{"rejection": reason}}
 		if allow {
 			dec = "approved"
 			if always {

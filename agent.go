@@ -125,7 +125,7 @@ type driver interface {
 	launch(a *Agent) (*proc, error)
 	send(a *Agent, text string) error
 	interrupt(a *Agent)
-	answer(a *Agent, p *Pending, allow, always bool, answers map[string]string)
+	answer(a *Agent, p *Pending, allow, always bool, answers map[string]string, reason string)
 	setMode(a *Agent, mode string)
 	history(a *Agent)
 }
@@ -315,6 +315,8 @@ func (a *Agent) Send(text string) {
 	if a.note != "" {
 		send, a.note = a.note+"\n\n"+text, ""
 	}
+	declined := a.Pending
+	a.Pending = nil
 	a.addEntry(Entry{Kind: EntryUser, Text: text})
 	a.Activity = "Starting"
 	a.TurnFrom = time.Now()
@@ -344,6 +346,9 @@ func (a *Agent) Send(text string) {
 			go a.hub.save()
 		}
 		a.mu.Unlock()
+	}
+	for _, p := range declined {
+		a.drv.answer(a, p, false, false, nil, "The user declined this. To tell you how to proceed, the user said:\n"+text)
 	}
 	a.mu.Lock()
 	a.State = Working
@@ -463,7 +468,7 @@ func (a *Agent) Answer(reqID string, allow, always bool, answers map[string]stri
 	}
 	a.mu.Unlock()
 	a.changed()
-	a.drv.answer(a, p, allow, always, answers)
+	a.drv.answer(a, p, allow, always, answers, "")
 }
 
 func (a *Agent) event(fn func() bool) {

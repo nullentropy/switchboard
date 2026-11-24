@@ -143,7 +143,7 @@ var toolDefs = []map[string]any{
 			"permission_mode": strProp("default, acceptEdits, auto or plan. Leave out for the user's default."),
 			"worktree":        map[string]any{"type": "boolean", "description": "Run it in its own git worktree on a new branch. Leave out to get one only when another session already works in the same repository."},
 		}, "folder", "prompt")},
-	{"name": "send_message", "description": "Send a message to a session. Starts or resumes its process if needed, so it also continues a Ready, Interrupted, Failed or Stopped session.",
+	{"name": "send_message", "description": "Send a message to a session. Starts or resumes its process if needed, so it also continues a Ready, Interrupted, Failed or Stopped session. If the session is waiting on a permission prompt, the message denies it, with the message as the reason, and the session carries on with the message.",
 		"inputSchema": obj(map[string]any{"session": idProp, "text": strProp("The message.")}, "session", "text")},
 	{"name": "interrupt_session", "description": "Stop the session's current turn. The process stays up.",
 		"inputSchema": obj(map[string]any{"session": idProp}, "session")},
