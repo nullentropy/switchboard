@@ -381,6 +381,11 @@ func (v *View) agentRemoved(a *Agent) {
 		if v.tiles[a] == nil {
 			return
 		}
+		var next *Agent
+		if v.focus != nil && v.focus.a == a {
+			list, _ := v.railOrder()
+			next = afterRemoval(v.hub.Dispatcher, list, a)
+		}
 		delete(v.tiles, a)
 		for i, x := range v.order {
 			if x == a {
@@ -391,8 +396,8 @@ func (v *View) agentRemoved(a *Agent) {
 		if v.sel == a {
 			v.sel = nil
 		}
-		if v.focus != nil && v.focus.a == a {
-			v.closeFocus()
+		if next != nil {
+			v.switchTo(next)
 		}
 		v.layoutBoard()
 		v.syncEmpty()
