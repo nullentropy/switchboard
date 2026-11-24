@@ -327,6 +327,20 @@ func (v *View) bindKeys() {
 			a.Interrupt()
 		}
 	})
+	s.OnKey(modKey+"+e", func() {
+		if a := v.target(); a != nil && len(a.Snapshot().Queued) > 0 {
+			v.openFocus(a)
+			v.focus.editNewest()
+		}
+	})
+	s.OnKey(modKey+"+shift+e", func() {
+		switch {
+		case v.focus != nil:
+			v.focus.sendNow()
+		case v.target() != nil:
+			go v.target().SendNow("")
+		}
+	})
 	s.OnKey(modKey+"+backspace", func() {
 		if a := v.target(); a != nil {
 			v.confirmRemove(a)
@@ -369,6 +383,8 @@ func (v *View) bindKeys() {
 	s.OnKey("shift+?", v.openShortcuts)
 	s.OnKey("escape", func() {
 		switch {
+		case v.focus != nil && v.focus.editing != 0:
+			v.focus.cancelEdit()
 		case v.focus != nil:
 			v.closeFocus()
 		case v.goal != "":
@@ -662,10 +678,11 @@ func (v *View) openShortcuts() {
 		{"J  K", "Move between sessions"}, {"Enter", "Open the selected session, write in the open one, or send the answers to a question"}, {modLabel + "1 … " + modLabel + "9", "Open a session by position"},
 		{"A", "Allow what the selected or first waiting session asks"}, {shiftLabel + "A", "Always allow it for that session"},
 		{"D", "Deny it"}, {modLabel + "J", "Jump to the next session that needs you"}, {".", "Interrupt the turn"},
+		{modLabel + "E", "Edit the newest pending message"}, {shiftLabel + modLabel + "E", "Interrupt and send pending messages now"},
 		{"R", "Rename"}, {modLabel + backspaceLabel, "Remove"}, {"Esc", "Leave the message box, then back to all sessions"}, {modLabel + ",", "Settings"},
 	} {
 		rows.Add(caution.HStack().Kids(kbd(h[0])))
 		rows.Add(caution.Label(h[1]).FontSize(13).Color("$inkDim"))
 	}
-	v.showDialog(caution.Dialog("Keyboard shortcuts").CardSize(520, 520).Kids(rows))
+	v.showDialog(caution.Dialog("Keyboard shortcuts").CardSize(520, 590).Kids(rows))
 }

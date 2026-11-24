@@ -302,6 +302,9 @@ func (v *View) updateDispatcher(s Snapshot) {
 		p := s.Pending[0]
 		line, color = strings.TrimSpace("Dispatcher wants "+p.Tool+" "+p.Summary), "$stNeed"
 	}
+	if n := len(s.Queued); n > 0 {
+		line = fmt.Sprintf("%d pending  ·  %s", n, line)
+	}
 	v.dLine.SetText(strings.Join(strings.Fields(line), " ")).SetColor(color).Tip(line)
 
 	key := ""

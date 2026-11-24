@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ type focusView struct {
 
 	node, title, stateL, sub, list, scroll, card, activity, clock, statusBar, bar, composer *caution.Node
 	note, noteBar                                                                           *caution.Node
+	pend                                                                                    *caution.Node
 	icon                                                                                    *stateMark
 	modeSel                                                                                 *caution.Node
 
@@ -43,6 +45,8 @@ type focusView struct {
 	ctxWindow  int
 	activityFX glint
 	cleared    int
+	queued     string
+	editing    int
 }
 
 type userRow struct {
@@ -62,6 +66,7 @@ func (v *View) showFocus(a *Agent) bool {
 		if v.focus.a == a {
 			return false
 		}
+		v.focus.cancelEdit()
 		v.focus.node.Remove()
 		v.focus = nil
 	}
@@ -87,6 +92,7 @@ func (v *View) closeFocus() {
 		return
 	}
 	v.closeDialog()
+	v.focus.cancelEdit()
 	v.focus.node.Remove()
 	v.shell.Remove()
 	v.focus = nil
@@ -133,8 +139,10 @@ func (f *focusView) build() {
 		),
 	)
 
-	f.list = caution.VStack().Gap(16).Pad(28).Align("stretch").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)})
-	f.scroll = caution.Scroll().StickBottom().NoFade().Kids(f.list)
+	f.list = caution.VStack().Gap(16).Pad(28).Align("stretch")
+	f.pend = caution.VStack().Gap(16).Align("stretch")
+	f.scroll = caution.Scroll().StickBottom().NoFade().Kids(
+		caution.VStack().Align("stretch").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)}).Kids(f.list, f.pend))
 
 	f.card = caution.Panel().Dock("bottom").H(0).Bg("$needBg").Clips()
 
@@ -186,6 +194,10 @@ func (f *focusView) submit(s string) {
 }
 
 func (f *focusView) send(text string) {
+	if f.editing != 0 {
+		f.saveEdit(text)
+		return
+	}
 	if strings.TrimSpace(text) == "" {
 		return
 	}
@@ -197,6 +209,117 @@ func (f *focusView) send(text string) {
 	}
 	f.say("")
 	go f.a.Send(text)
+}
+
+func (f *focusView) edit(id int) {
+	if f.editing != 0 && f.editing != id {
+		f.a.EndEdit(f.editing, "", false)
+	}
+	text, ok := f.a.BeginEdit(id)
+	if !ok {
+		return
+	}
+	f.editing = id
+	f.composer.SetValueNow(text)
+	f.composer.Focus()
+	f.say("Editing a pending message. Enter saves it, Esc cancels.")
+}
+
+func (f *focusView) editNewest() {
+	if q := f.a.Snapshot().Queued; len(q) > 0 {
+		f.edit(q[len(q)-1].ID)
+	}
+}
+
+func (f *focusView) saveEdit(text string) {
+	id := f.editing
+	f.editing = 0
+	f.composer.ClearValue()
+	f.say("")
+	go f.a.EndEdit(id, text, true)
+}
+
+func (f *focusView) cancelEdit() {
+	if f.editing == 0 {
+		return
+	}
+	id := f.editing
+	f.editing = 0
+	f.composer.ClearValue()
+	f.say("")
+	go f.a.EndEdit(id, "", false)
+}
+
+func (f *focusView) sendNow() {
+	text := valueOf(f.composer)
+	if f.editing != 0 {
+		id := f.editing
+		f.editing = 0
+		f.composer.ClearValue()
+		f.say("")
+		go func() {
+			f.a.EndEdit(id, text, true)
+			f.a.SendNow("")
+		}()
+		return
+	}
+	f.composer.ClearValue()
+	f.mention.input("")
+	f.say("")
+	go f.a.SendNow(text)
+}
+
+func queuedNote(st State) string {
+	switch st {
+	case Working, Starting:
+		return "Not delivered yet. It reaches the agent when this turn ends."
+	case NeedsYou:
+		return "Not delivered yet. It reaches the agent when this turn ends, or with your next message."
+	case Failed, Stopped, Interrupted:
+		return "Not delivered yet. It goes with your next message, or press Send now."
+	}
+	return "Not delivered yet. It goes when you finish editing."
+}
+
+func (f *focusView) showQueued(qs []Queued, st State) {
+	key := fmt.Sprint(qs, queuedNote(st))
+	if key == f.queued {
+		return
+	}
+	f.queued = key
+	if f.editing != 0 && !slices.ContainsFunc(qs, func(q Queued) bool { return q.ID == f.editing }) {
+		f.editing = 0
+		f.say("")
+	}
+	f.pend.Clear()
+	f.pend.Pad(map[bool]float64{true: 0, false: 28}[len(qs) == 0])
+	for _, q := range qs {
+		id := q.ID
+		who := "You"
+		if q.From == "dispatcher" {
+			who = "Dispatcher"
+		}
+		var actions *caution.Node
+		if q.Editing {
+			actions = caution.HStack().Gap(6).Align("center").Kids(
+				caution.Label("Editing in the message box").FontSize(12).Color("$inkFaint"),
+				caution.Button("Cancel").Tip("Keep the original text (Esc)").OnClick(f.cancelEdit))
+		} else {
+			actions = caution.HStack().Gap(6).Align("center").Kids(
+				caution.Button("Edit").Tip("Change it before it is delivered ("+modLabel+"E edits the newest)").OnClick(func() { f.edit(id) }),
+				caution.Button("Clear").Tip("Drop it; it is never delivered").OnClick(func() { go f.a.ClearQueued(id) }),
+				caution.Button("Send now").Tip("Interrupt the turn and deliver pending messages now ("+shiftLabel+modLabel+"E)").OnClick(func() { go f.a.SendNow("") }))
+		}
+		f.pend.Add(caution.HStack().Gap(12).Kids(
+			caution.VStack().Gap(3).W(72).Kids(
+				caution.Label(who).FontSize(12).Weight(600).Color("$inkDim"),
+				caution.Label("Pending").FontSize(11).Weight(600).Color("$stNeed")),
+			caution.VStack().Gap(8).Fill(1).Align("stretch").Kids(
+				caution.RichText(caution.Span{Text: q.Text}).FontSize(14).Italic().Color("$inkDim").Selectable(),
+				caution.Label(queuedNote(st)).FontSize(12).Color("$inkFaint"),
+				actions),
+		))
+	}
 }
 
 func (f *focusView) say(text string) {
@@ -267,6 +390,8 @@ func (f *focusView) update(s Snapshot) {
 				OnPick(func(_, _ float64, _ *caution.Node) { f.confirmRestore(n, text) }),
 		))
 	}
+
+	f.showQueued(s.Queued, s.State)
 
 	key := ""
 	if len(s.Pending) > 0 {

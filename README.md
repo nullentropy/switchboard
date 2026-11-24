@@ -191,6 +191,8 @@ press Ctrl where this table says Cmd.
 | `D` | Deny it |
 | `Cmd+J` | Jump to the next session that needs you |
 | `.` | Interrupt the turn |
+| `Cmd+E` | Edit the newest pending message |
+| `Cmd+Shift+E` | Interrupt and send pending messages now |
 | `R` | Rename |
 | `Cmd+Delete` | Remove |
 | `Esc` | Leave the message box, then back to all sessions |

@@ -286,6 +286,14 @@ func clipLeft(s string, n int) string {
 }
 
 func statusLine(s Snapshot) (string, string) {
+	text, color := statusText(s)
+	if n := len(s.Queued); n > 0 {
+		text = map[bool]string{true: "1 message pending", false: fmt.Sprintf("%d messages pending", n)}[n == 1] + "  ·  " + text
+	}
+	return text, color
+}
+
+func statusText(s Snapshot) (string, string) {
 	if s.State == NeedsYou && len(s.Pending) > 0 {
 		p := s.Pending[0]
 		switch {

@@ -102,6 +102,13 @@ type Pending struct {
 	raw         any
 }
 
+type Queued struct {
+	ID      int
+	Text    string
+	From    string
+	Editing bool
+}
+
 type Meta struct {
 	ID          string    `json:"id"`
 	Provider    string    `json:"provider,omitempty"`
@@ -145,6 +152,10 @@ type Agent struct {
 	TurnFrom time.Time
 	Err      string
 
+	queue   []Queued
+	queueID int
+	editing int
+
 	extraArgs func() []string
 
 	p         *proc
@@ -185,6 +196,7 @@ type Snapshot struct {
 	Branch    string
 	Entries   []Entry
 	Pending   []*Pending
+	Queued    []Queued
 	Cost      float64
 	TurnFrom  time.Time
 	Err       string
@@ -257,8 +269,16 @@ func (a *Agent) Snapshot() Snapshot {
 		Entries: append([]Entry(nil), a.Entries...), Pending: append([]*Pending(nil), a.Pending...),
 		Cost: a.Cost, TurnFrom: a.TurnFrom, Err: a.Err, Station: a.station, Subs: a.subList(),
 		Marks: append([]Mark(nil), a.marks...), CtxUsed: a.ctxUsed, CtxWindow: a.ctxWindow,
-		Cleared: a.cleared,
+		Cleared: a.cleared, Queued: a.queued(),
 	}
+}
+
+func (a *Agent) queued() []Queued {
+	out := append([]Queued(nil), a.queue...)
+	for i := range out {
+		out[i].Editing = out[i].ID == a.editing
+	}
+	return out
 }
 
 func (a *Agent) clearConversation() {
@@ -293,31 +313,154 @@ func (a *Agent) fail(err error) {
 	a.changed()
 }
 
-func (a *Agent) Send(text string) {
+func (a *Agent) Send(text string) { a.SendFrom(text, "") }
+
+func (a *Agent) busy() bool { return a.State == Working || a.State == Starting }
+
+func (a *Agent) enqueue(text, from string) {
+	a.queueID++
+	a.queue = append(a.queue, Queued{ID: a.queueID, Text: text, From: from})
+}
+
+func (a *Agent) Queue(text, from string) bool {
 	text = strings.TrimSpace(text)
-	if text == "" {
+	a.mu.Lock()
+	held := text != "" && (a.busy() || a.editing != 0)
+	if held {
+		a.enqueue(text, from)
+	}
+	a.mu.Unlock()
+	if held {
+		a.changed()
+	}
+	return held
+}
+
+func (a *Agent) ClearQueued(id int) {
+	a.mu.Lock()
+	a.dropQueued(id)
+	a.mu.Unlock()
+	a.changed()
+	a.flush()
+}
+
+func (a *Agent) dropQueued(id int) {
+	for i, q := range a.queue {
+		if q.ID == id {
+			a.queue = append(a.queue[:i:i], a.queue[i+1:]...)
+			break
+		}
+	}
+	if a.editing == id {
+		a.editing = 0
+	}
+}
+
+func (a *Agent) BeginEdit(id int) (string, bool) {
+	a.mu.Lock()
+	defer a.changed()
+	defer a.mu.Unlock()
+	for _, q := range a.queue {
+		if q.ID == id {
+			a.editing = id
+			return q.Text, true
+		}
+	}
+	return "", false
+}
+
+func (a *Agent) EndEdit(id int, text string, save bool) {
+	text = strings.TrimSpace(text)
+	a.mu.Lock()
+	if a.editing == id {
+		a.editing = 0
+	}
+	if save && text == "" {
+		a.dropQueued(id)
+	}
+	for i := range a.queue {
+		if save && a.queue[i].ID == id {
+			a.queue[i].Text = text
+		}
+	}
+	a.mu.Unlock()
+	a.changed()
+	a.flush()
+}
+
+func (a *Agent) SendNow(text string) {
+	text = strings.TrimSpace(text)
+	a.mu.Lock()
+	if text != "" {
+		a.enqueue(text, "")
+	}
+	a.editing = 0
+	live := a.busy() && a.p != nil
+	a.mu.Unlock()
+	a.changed()
+	if live {
+		a.drv.interrupt(a)
 		return
 	}
+	a.SendFrom("", "")
+}
+
+func (a *Agent) flush() {
 	a.mu.Lock()
+	ready := a.State == Ready && a.editing == 0 && len(a.queue) > 0
+	a.mu.Unlock()
+	if ready {
+		a.SendFrom("", "")
+	}
+}
+
+func (a *Agent) SendFrom(text, from string) {
+	text = strings.TrimSpace(text)
+	a.mu.Lock()
+	if a.busy() || a.editing != 0 {
+		if text != "" {
+			a.enqueue(text, from)
+		}
+		a.mu.Unlock()
+		if text != "" {
+			a.changed()
+		}
+		return
+	}
+	var texts []string
+	for _, q := range a.queue {
+		texts = append(texts, q.Text)
+	}
+	a.queue = nil
+	if text != "" {
+		texts = append(texts, text)
+	}
+	if len(texts) == 0 {
+		a.mu.Unlock()
+		return
+	}
 	var old *proc
-	if a.p != nil && a.procModel != a.Meta.Model && a.State != Working && a.State != Starting && a.State != NeedsYou {
+	if a.p != nil && a.procModel != a.Meta.Model && a.State != NeedsYou {
 		old, a.p = a.p, nil
 		a.costBase += a.procCost
 		a.procCost = 0
 	}
 	running := a.p != nil
 	if !running {
-		a.State = Starting
 		a.stopped = false
 		a.procModel = a.Meta.Model
 	}
-	send := text
+	a.State = Starting
+	joined := strings.Join(texts, "\n\n")
+	send := joined
 	if a.note != "" {
-		send, a.note = a.note+"\n\n"+text, ""
+		send, a.note = a.note+"\n\n"+joined, ""
 	}
 	declined := a.Pending
 	a.Pending = nil
-	a.addEntry(Entry{Kind: EntryUser, Text: text})
+	for _, t := range texts {
+		a.addEntry(Entry{Kind: EntryUser, Text: t})
+	}
 	a.Activity = "Starting"
 	a.TurnFrom = time.Now()
 	a.Err = ""
@@ -329,7 +472,9 @@ func (a *Agent) Send(text string) {
 	if a != a.hub.Dispatcher {
 		cp := a.takeCheckpoint()
 		a.mu.Lock()
-		a.Meta.Checkpoints = append(a.Meta.Checkpoints, cp)
+		for range texts {
+			a.Meta.Checkpoints = append(a.Meta.Checkpoints, cp)
+		}
 		a.mu.Unlock()
 		go a.hub.save()
 	}
@@ -348,7 +493,7 @@ func (a *Agent) Send(text string) {
 		a.mu.Unlock()
 	}
 	for _, p := range declined {
-		a.drv.answer(a, p, false, false, nil, "The user declined this. To tell you how to proceed, the user said:\n"+text)
+		a.drv.answer(a, p, false, false, nil, "The user declined this. To tell you how to proceed, the user said:\n"+joined)
 	}
 	a.mu.Lock()
 	a.State = Working
@@ -557,6 +702,10 @@ func (a *Agent) turnEnd(errText string) {
 	a.turn = ""
 	a.clearSubs()
 	go a.refreshBranch()
+	if a.editing == 0 && len(a.queue) > 0 {
+		go a.flush()
+		return
+	}
 	go a.hub.done(a)
 }
 

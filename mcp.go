@@ -128,7 +128,7 @@ var (
 var toolDefs = []map[string]any{
 	{"name": "system_load", "description": "How loaded the machine is: load average against its cores, free memory and swap, whether it is overloaded, and each session's CPU and memory with its busiest process.",
 		"inputSchema": obj(map[string]any{})},
-	{"name": "list_sessions", "description": "Every session on the wall: id, title, folder, branch, state, current activity, last reply, anything waiting on the user, and cost. State is Starting, Working, Needs you, Ready, Failed, Interrupted or Stopped. Interrupted means Switchboard quit in the middle of its turn; a message resumes it. Stopped means the user or you stopped it.",
+	{"name": "list_sessions", "description": "Every session on the wall: id, title, folder, branch, state, current activity, last reply, anything waiting on the user, how many messages are pending (sent mid-turn, not yet delivered), and cost. State is Starting, Working, Needs you, Ready, Failed, Interrupted or Stopped. Interrupted means Switchboard quit in the middle of its turn; a message resumes it. Stopped means the user or you stopped it.",
 		"inputSchema": obj(map[string]any{})},
 	{"name": "read_session", "description": "The recent transcript of one session, oldest first.",
 		"inputSchema": obj(map[string]any{"session": idProp, "limit": map[string]any{"type": "integer", "description": "How many entries, default 20."}}, "session")},
@@ -143,7 +143,7 @@ var toolDefs = []map[string]any{
 			"permission_mode": strProp("default, acceptEdits, auto or plan. Leave out for the user's default."),
 			"worktree":        map[string]any{"type": "boolean", "description": "Run it in its own git worktree on a new branch. Leave out to get one only when another session already works in the same repository."},
 		}, "folder", "prompt")},
-	{"name": "send_message", "description": "Send a message to a session. Starts or resumes its process if needed, so it also continues a Ready, Interrupted, Failed or Stopped session. If the session is waiting on a permission prompt, the message denies it, with the message as the reason, and the session carries on with the message.",
+	{"name": "send_message", "description": "Send a message to a session. Starts or resumes its process if needed, so it also continues a Ready, Interrupted, Failed or Stopped session. If the session is waiting on a permission prompt, the message denies it, with the message as the reason, and the session carries on with the message. If the session is in the middle of a turn, the message waits as pending and reaches it when the turn ends; the reply is Queued. The user can edit, clear or send a pending message early.",
 		"inputSchema": obj(map[string]any{"session": idProp, "text": strProp("The message.")}, "session", "text")},
 	{"name": "interrupt_session", "description": "Stop the session's current turn. The process stays up.",
 		"inputSchema": obj(map[string]any{"session": idProp}, "session")},
@@ -195,6 +195,9 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 				p := s.Pending[0]
 				row["waiting_on_user"] = strings.TrimSpace(p.Tool + " " + p.Summary)
 			}
+			if len(s.Queued) > 0 {
+				row["pending_messages"] = len(s.Queued)
+			}
 			out = append(out, row)
 		}
 		if len(out) == 0 {
@@ -229,6 +232,9 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 			case EntryError:
 				fmt.Fprintf(&b, "\nError: %s\n", e.Text)
 			}
+		}
+		for _, q := range s.Queued {
+			fmt.Fprintf(&b, "\nPending, not yet delivered: %s\n", q.Text)
 		}
 		return b.String(), nil
 	case "start_session":
@@ -271,8 +277,8 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if a.Snapshot().State == Working {
-			return "", fmt.Errorf("%s is in the middle of a turn; wait for it or interrupt it first", a.Snapshot().Meta.Title)
+		if a.Queue(str("text"), "dispatcher") {
+			return "Queued.", nil
 		}
 		go a.Send(str("text"))
 		return "Sent.", nil
