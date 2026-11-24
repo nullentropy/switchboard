@@ -212,6 +212,15 @@ Give it a goal that needs several sessions and it splits the work and starts
 one session per task under a shared goal name. It cannot answer permission
 prompts. Those stay with you.
 
+Its tools are served over MCP by Switchboard on `127.0.0.1`, on a random
+port and path chosen at startup. Only the dispatcher is given the address.
+
+Session processes run at a lower priority than the dispatcher and the
+window. Switchboard checks CPU and memory every 15 seconds while a session
+is working. It tells the dispatcher when the machine becomes overloaded and
+when it recovers. The dispatcher then holds back new sessions and can pause
+the busiest one that is building or testing.
+
 ### After a restart
 
 Quitting Switchboard ends every agent process, and each session keeps the
