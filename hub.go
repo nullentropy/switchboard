@@ -58,6 +58,7 @@ type Hub struct {
 	quitting     atomic.Bool
 	interrupted  []*Agent
 	updateTag    string
+	updateAsked  bool
 	restart      func() error
 	updater      *updater
 	stageMu      sync.Mutex

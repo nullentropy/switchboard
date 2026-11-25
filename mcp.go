@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -25,6 +26,7 @@ When the user asks for a new busy animation, use get_sprite to see the grid, the
 The user's machine has limited CPU and memory, and sessions that compile or run tests can make it unresponsive. Before starting more than one session, check system_load and start only as many as it has room for: when it is busy, start one, and start the rest as earlier ones finish. Switchboard also tells you, in a [switchboard] message, when the machine becomes overloaded and when it recovers. When it is overloaded, start nothing new. If it stays overloaded, interrupt the busiest session that is building or testing and send it a message to wait. When it recovers, tell the sessions you held back to continue, and start the ones you deferred. Tell the user in one sentence when you hold work back for load.
 When you start several sessions in one repository, each one after the first gets its own git worktree and branch unless you set worktree.
 When the user asks to clear finished sessions off the wall, stop each one with stop_session and then remove it with remove_session. remove_session refuses a session whose worktree still has uncommitted changes or unmerged commits; tell the user which ones and what is left.
+When the user asks whether Switchboard is up to date or to update it, use check_for_updates; it downloads a newer release but never restarts Switchboard, so tell the user the update is ready and that they restart Switchboard themselves.
 Your replies show in a small strip, so keep them to one to three short sentences.`
 
 type mcpServer struct {
@@ -161,6 +163,8 @@ var toolDefs = []map[string]any{
 		"inputSchema": obj(map[string]any{"session": idProp}, "session")},
 	{"name": "stop_session", "description": "End the session's process and mark it Stopped. Its conversation is kept and the next message resumes it.",
 		"inputSchema": obj(map[string]any{"session": idProp}, "session")},
+	{"name": "check_for_updates", "description": "Check for a newer release of Switchboard. If there is one, download it so it is ready, whether or not automatic updates are on. Never restarts Switchboard; the user restarts it when they choose. Returns the current version and, when one was downloaded, the new version.",
+		"inputSchema": obj(map[string]any{})},
 	{"name": "remove_session", "description": "Take a Stopped session off the wall, as removing it in the window does. Its conversation stays on disk and its checkpoints are dropped. If it has its own worktree, the worktree and branch are deleted when they hold nothing unmerged; otherwise it refuses and says what is left.",
 		"inputSchema": obj(map[string]any{"session": idProp}, "session")},
 }
@@ -328,6 +332,18 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 		return "Sent.", nil
 	case "system_load":
 		return m.hub.loadReport(), nil
+	case "check_for_updates":
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer cancel()
+		cur, tag, err := m.hub.FetchUpdate(ctx)
+		if err != nil {
+			return "", err
+		}
+		cur = strings.TrimPrefix(cur, "v")
+		if tag == "" {
+			return fmt.Sprintf("Switchboard %s is up to date.", cur), nil
+		}
+		return fmt.Sprintf("Switchboard %s is running and %s is downloaded and ready. Switchboard was not restarted. Tell the user the update is ready and that they restart Switchboard themselves when they choose, with the Update ready button or Restart to update in the command palette.", cur, strings.TrimPrefix(tag, "v")), nil
 	case "interrupt_session":
 		a, err := m.find(str("session"))
 		if err != nil {

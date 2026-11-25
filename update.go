@@ -451,6 +451,34 @@ func (h *Hub) DownloadUpdate(ctx context.Context) (string, error) {
 	return tag, err
 }
 
+var errDevBuild = errors.New("this is a development build of Switchboard, which does not update itself")
+
+func (h *Hub) FetchUpdate(ctx context.Context) (current, tag string, err error) {
+	if h.updater == nil {
+		if _, ok := parseTag(version); !ok {
+			return version, "", errDevBuild
+		}
+		return version, "", errNoSelfUpdate
+	}
+	current = h.updater.version
+	if _, ok := parseTag(current); !ok {
+		return current, "", errDevBuild
+	}
+	tag, err = h.stageUpdate(ctx)
+	if err != nil || tag == "" {
+		return current, "", err
+	}
+	h.mu.Lock()
+	changed := h.updateTag != tag || !h.updateAsked
+	h.updateTag = tag
+	h.updateAsked = true
+	h.mu.Unlock()
+	if changed {
+		h.each(func(v *View) { v.updateChanged() })
+	}
+	return current, tag, nil
+}
+
 func (h *Hub) setUpdateReady(tag string) {
 	h.mu.Lock()
 	changed := h.updateTag != tag
@@ -464,7 +492,7 @@ func (h *Hub) setUpdateReady(tag string) {
 func (h *Hub) UpdateReady() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.settings.UpdatesOff {
+	if h.settings.UpdatesOff && !h.updateAsked {
 		return ""
 	}
 	return h.updateTag

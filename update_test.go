@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -346,5 +347,50 @@ func TestABuildThatCannotUpdateSaysSo(t *testing.T) {
 	}
 	if _, err := h.DownloadUpdate(context.Background()); err != errNoSelfUpdate {
 		t.Fatalf("download got %v; want %v", err, errNoSelfUpdate)
+	}
+}
+
+func TestTheUpdateToolOnTheLatestReleaseSaysUpToDate(t *testing.T) {
+	rel := linuxRelease(t, "v0.2.0", "new")
+	u := testUpdater(t, rel.serve(t), "0.2.0", "linux")
+	h := &Hub{updater: &u}
+	got, err := (&mcpServer{hub: h}).call("check_for_updates", nil)
+	if err != nil || got != "Switchboard 0.2.0 is up to date." {
+		t.Fatalf("got %q, %v; want up to date", got, err)
+	}
+	if h.UpdateReady() != "" || u.readyTag() != "" {
+		t.Fatal("an up to date check staged a release")
+	}
+}
+
+func TestTheUpdateToolDownloadsANewerReleaseAndDoesNotRestart(t *testing.T) {
+	rel := linuxRelease(t, "v0.3.0", "new")
+	u := testUpdater(t, rel.serve(t), "0.2.0", "linux")
+	restarted := false
+	h := &Hub{updater: &u, settings: Settings{UpdatesOff: true}, restart: func() error { restarted = true; return nil }}
+	got, err := (&mcpServer{hub: h}).call("check_for_updates", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"0.2.0", "0.3.0", "ready", "restart Switchboard themselves"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("result %q does not mention %q", got, want)
+		}
+	}
+	if u.readyTag() != "v0.3.0" {
+		t.Fatal("the newer release is not staged")
+	}
+	if h.UpdateReady() != "v0.3.0" {
+		t.Fatalf("UpdateReady = %q; want v0.3.0 shown with automatic updates off", h.UpdateReady())
+	}
+	if restarted {
+		t.Fatal("the tool restarted Switchboard")
+	}
+}
+
+func TestTheUpdateToolOnADevBuildSaysSo(t *testing.T) {
+	_, err := (&mcpServer{hub: &Hub{}}).call("check_for_updates", nil)
+	if err == nil || !strings.Contains(err.Error(), "development build") {
+		t.Fatalf("got %v; want a development build message", err)
 	}
 }
