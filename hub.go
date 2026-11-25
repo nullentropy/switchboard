@@ -13,17 +13,18 @@ import (
 )
 
 type Settings struct {
-	Theme     string                       `json:"theme"`
-	Sounds    bool                         `json:"sounds"`
-	Mode      string                       `json:"mode"`
-	Model     string                       `json:"model"`
-	Provider  string                       `json:"provider,omitempty"`
-	WindowW   int                          `json:"windowW,omitempty"`
-	WindowH   int                          `json:"windowH,omitempty"`
-	Maximized bool                         `json:"maximized,omitempty"`
-	SidebarW  int                          `json:"sidebarW,omitempty"`
-	LastCwd   string                       `json:"lastCwd"`
-	Themes    map[string]map[string]string `json:"themes,omitempty"`
+	Theme      string                       `json:"theme"`
+	Sounds     bool                         `json:"sounds"`
+	Mode       string                       `json:"mode"`
+	Model      string                       `json:"model"`
+	Provider   string                       `json:"provider,omitempty"`
+	WindowW    int                          `json:"windowW,omitempty"`
+	WindowH    int                          `json:"windowH,omitempty"`
+	Maximized  bool                         `json:"maximized,omitempty"`
+	SidebarW   int                          `json:"sidebarW,omitempty"`
+	LastCwd    string                       `json:"lastCwd"`
+	Themes     map[string]map[string]string `json:"themes,omitempty"`
+	UpdatesOff bool                         `json:"updatesOff,omitempty"`
 }
 
 type saved struct {
@@ -49,6 +50,8 @@ type Hub struct {
 	limits       map[string]Limits
 	quitting     atomic.Bool
 	interrupted  []*Agent
+	updateTag    string
+	restart      func() error
 }
 
 func newHub(bins map[string]string, path string) *Hub {

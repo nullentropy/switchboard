@@ -25,6 +25,9 @@ New-Item -ItemType Directory -Force -Path $out, $stage | Out-Null
 git worktree add --detach --quiet $src HEAD
 if ($LASTEXITCODE -ne 0) { throw 'git worktree add failed' }
 try {
+	# winapp sets its own -ldflags, so the version goes in as a source file
+	# in the throwaway checkout instead.
+	Set-Content -Path (Join-Path $src 'version_release.go') -Value "package main`n`nfunc init() { version = `"$Version`" }"
 	Push-Location $src
 	go run github.com/nullentropy/caution/cmd/winapp -pkg . -name Switchboard -icon icon.png -o $stage -cc gcc
 	if ($LASTEXITCODE -ne 0) { throw 'winapp failed' }

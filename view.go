@@ -55,6 +55,7 @@ type View struct {
 	projNames                  []string
 	projBox, projSel           *caution.Node
 	limitsBox                  *caution.Node
+	updateBox                  *caution.Node
 	rows                       map[*Agent]*railRow
 	dialog                     *caution.Node
 	askSend                    func()
@@ -144,6 +145,8 @@ func (v *View) build() *caution.Node {
 		inset = 72
 	}
 	v.limitsBox = caution.HStack().Gap(24).Align("center")
+	v.updateBox = caution.HStack().Align("center")
+	v.drawUpdate()
 	v.drawLimits()
 	v.compact = caution.RichText().FontSize(12).Color("$inkDim").Anchor(caution.A{Left: px(210 + inset), CenterY: px(0)})
 	v.statsRow = caution.HStack().Gap(12).Align("center").Anchor(caution.A{Left: px(210 + inset), CenterY: px(0)}).Kids(
@@ -156,6 +159,7 @@ func (v *View) build() *caution.Node {
 		),
 		v.statsRow,
 		caution.HStack().Gap(8).Align("center").Anchor(caution.A{Right: px(16), CenterY: px(0)}).Kids(
+			v.updateBox,
 			v.limitsBox,
 			v.projBox,
 			caution.Button("Commands  "+modLabel+"K").Tip("Every action and session ("+modLabel+"K)").OnClick(v.openPalette),
@@ -443,6 +447,7 @@ func (v *View) settingsChanged() {
 	v.s.Update(func() {
 		themeChanged := set.Theme != v.set.Theme || !maps.Equal(themeTokens(set, set.Theme), themeTokens(v.set, set.Theme))
 		v.set = set
+		v.drawUpdate()
 		if themeChanged {
 			v.s.SetTheme(themeTokens(set, set.Theme))
 			for _, t := range v.tiles {
@@ -676,13 +681,17 @@ func (v *View) openSettings() {
 		}
 		v.hub.SetDispatcherModel(model)
 	})
+	upd := caution.Checkbox("Update automatically", !set.UpdatesOff).OnToggle(func(b bool) {
+		v.hub.UpdateSettings(func(s *Settings) { s.UpdatesOff = !b })
+	})
 	lbl := func(s string) *caution.Node { return caution.Label(s).FontSize(13).Color("$inkDim") }
-	d := caution.Dialog("Settings").CardSize(480, 234).Kids(
+	d := caution.Dialog("Settings").CardSize(480, 276).Kids(
 		caution.Grid([]caution.GridCol{{Px: 120}, {Weight: 1, Align: "stretch"}}).ColGap(12).RowGap(12).
 			Anchor(caution.A{Left: px(20), Right: px(20), Top: px(18)}).Kids(
 			lbl("Theme"), theme,
 			lbl("Sound"), snd,
 			lbl("Dispatcher model"), dmodel,
+			lbl("Updates"), upd,
 		),
 		caution.Button("Done").Primary().Anchor(caution.A{Right: px(20), Bottom: px(20)}).OnClick(v.closeDialog),
 	)
@@ -700,4 +709,52 @@ func expandHome(p string) string {
 		p = home + p[1:]
 	}
 	return filepath.Clean(p)
+}
+
+func (v *View) updateChanged() { v.s.Update(v.drawUpdate) }
+
+func (v *View) drawUpdate() {
+	v.updateBox.Clear()
+	if tag := v.hub.UpdateReady(); tag != "" {
+		v.updateBox.Add(caution.Button("Update " + strings.TrimPrefix(tag, "v") + " ready").
+			Tip("Restart Switchboard into the new version").OnClick(v.restartToUpdate))
+	}
+}
+
+func (v *View) restartToUpdate() {
+	tag := v.hub.UpdateReady()
+	if tag == "" {
+		return
+	}
+	names := v.hub.midTurn()
+	if len(names) == 0 {
+		v.closeDialog()
+		go v.restartNow()
+		return
+	}
+	head := "Restarting stops the turn these sessions are in. You can resume them after."
+	v.showDialog(caution.Dialog("Restart to update to "+strings.TrimPrefix(tag, "v")+"?").CardSize(460, 150+18*float64(len(names))).Kids(
+		caution.VStack().Gap(8).Align("stretch").Anchor(caution.A{Left: px(20), Right: px(20), Top: px(16)}).Kids(
+			caution.Label(head).FontSize(13).Color("$inkDim").Wrap(),
+			caution.Label(strings.Join(names, "\n")).FontSize(13).Wrap(),
+		),
+		caution.HStack().Gap(8).Anchor(caution.A{Right: px(20), Bottom: px(20)}).Kids(
+			caution.Button("Cancel").OnClick(v.closeDialog),
+			caution.Button("Restart").Primary().OnClick(func() { v.closeDialog(); go v.restartNow() }),
+		),
+	))
+}
+
+func (v *View) restartNow() {
+	err := v.hub.RestartToUpdate()
+	if err == nil {
+		return
+	}
+	v.s.Update(func() {
+		v.showDialog(caution.Dialog("Could not update").CardSize(460, 160).Kids(
+			caution.Label(err.Error()+". Switchboard is still running the current version.").FontSize(13).Color("$inkDim").Wrap().
+				Anchor(caution.A{Left: px(20), Right: px(20), Top: px(16)}),
+			caution.Button("OK").Primary().Anchor(caution.A{Right: px(20), Bottom: px(20)}).OnClick(v.closeDialog),
+		))
+	})
 }

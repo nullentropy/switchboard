@@ -51,7 +51,7 @@ release_macos() {
 			MACOSX_DEPLOYMENT_TARGET=$min_macos \
 			CGO_CFLAGS="-O2 -g -mmacosx-version-min=$min_macos" \
 			CGO_LDFLAGS="-mmacosx-version-min=$min_macos" \
-			go build -trimpath -o "$work/switchboard-$arch" .)
+			go build -trimpath -ldflags "-X main.version=$version" -o "$work/switchboard-$arch" .)
 		minos=$(vtool -show-build "$work/switchboard-$arch" | awk '$1 == "minos" { print $2 }')
 		if [ "$minos" != "$min_macos" ]; then
 			echo "$arch binary declares macOS $minos, want $min_macos" >&2
@@ -79,7 +79,7 @@ release_macos() {
 release_linux() {
 	arch=$(go env GOARCH)
 	tgz="$out/Switchboard-$version-linux-$arch.tar.gz"
-	(cd "$work/src" && CGO_ENABLED=1 go build -trimpath -o "$work/switchboard" .)
+	(cd "$work/src" && CGO_ENABLED=1 go build -trimpath -ldflags "-X main.version=$version" -o "$work/switchboard" .)
 	(cd "$work/src" && go run github.com/nullentropy/caution/cmd/linuxapp -bin "$work/switchboard" -name Switchboard -icon icon.png \
 		-comment "Coding agent sessions side by side" -categories "Development;" -o "$work/stage")
 

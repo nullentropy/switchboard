@@ -463,6 +463,9 @@ func (v *View) paletteItems() []paletteItem {
 		{"Keyboard shortcuts", "?", icKeys, v.openShortcuts, "Actions"},
 		{"Settings", modLabel + ",", icSettings, v.openSettings, "Actions"},
 	}
+	if tag := v.hub.UpdateReady(); tag != "" {
+		items = append(items, paletteItem{"Restart to update to " + strings.TrimPrefix(tag, "v"), "", icSettings, v.restartToUpdate, "Actions"})
+	}
 	if a := v.target(); a != nil {
 		title := a.Snapshot().Meta.Title
 		g := "On " + title

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -31,6 +32,10 @@ func main() {
 		bins = map[string]string{"claude": "true", "codex": "true", "gemini": "true"}
 	}
 	hub := newHub(bins, *statePath)
+	var flushWindow func()
+	if !*demo {
+		startUpdates(hub, &flushWindow)
+	}
 	go hub.loadCodexModels()
 	go hub.loadClaudeModels()
 	if err := checkBin(hub, "claude"); err != nil && !*demo {
@@ -57,6 +62,7 @@ func main() {
 		mount := mountView(hub, runtime.GOOS == "darwin")
 		saved := hub.Settings()
 		win := &windowSaver{hub: hub}
+		flushWindow = win.flush
 		w, h := windowSize(saved)
 		err := native.Run(mount, native.Options{Title: "Switchboard", W: w, H: h, Maximized: saved.Maximized,
 			OnWindow: win.note, AppID: "switchboard", CustomTitlebar: runtime.GOOS == "darwin", TitlebarStyle: "tall"})
@@ -85,4 +91,42 @@ func defaultStatePath() string {
 		dir = os.TempDir()
 	}
 	return filepath.Join(dir, "switchboard", "state.json")
+}
+
+// startUpdates installs a staged release before anything else starts, then
+// keeps checking for newer ones.
+func startUpdates(hub *Hub, flushWindow *func()) {
+	u := newUpdater()
+	if _, ok := parseTag(u.version); !ok {
+		return
+	}
+	root, exe, err := installRoot()
+	if err != nil {
+		log.Printf("update: find the install: %v", err)
+		return
+	}
+	if ok, err := u.atLaunch(hub.Settings(), root); err != nil {
+		log.Printf("update: %v", err)
+	} else if ok {
+		log.Printf("update: installed, relaunching")
+		if err := relaunch(exe); err != nil {
+			log.Printf("update: relaunch: %v", err)
+		}
+	}
+	hub.restart = func() error {
+		ok, err := u.installStaged(root)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.New("no update is ready")
+		}
+		if *flushWindow != nil {
+			(*flushWindow)()
+		}
+		hub.StopAll()
+		time.Sleep(500 * time.Millisecond)
+		return relaunch(exe)
+	}
+	go hub.watchUpdates(u)
 }
