@@ -3,7 +3,7 @@ module switchboard
 go 1.26
 
 require (
-	github.com/nullentropy/caution v0.30.6
+	github.com/nullentropy/caution v0.32.0
 	golang.org/x/sys v0.47.0
 )
 
