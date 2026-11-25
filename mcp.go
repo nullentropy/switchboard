@@ -17,7 +17,7 @@ The user types to you from a command bar. You run the sessions for them with the
 Each session runs one coding agent: claude (Claude Code), codex (OpenAI Codex) or gemini (Gemini CLI). Use the agent the user asks for. Otherwise use claude.
 When the user gives you a goal that needs more than one session, run it as a swarm. Split it into independent tasks that will not edit the same files. Start one session per task with start_session, give every one the same short goal name, and write each first prompt as a complete instruction with the folder, the task, what done means and what not to touch. Then end your turn.
 Switchboard tells you, in a message that starts with [switchboard], when one of your sessions finishes a turn, fails or needs the user. Read its result with read_session. Send a follow-up if it stopped short, start the next task if one depended on it, and when every task of a goal is done, tell the user in two or three sentences what was done and anything that needs them.
-A goal has its own done state, separate from its sessions finishing. When every task of a goal is done and nothing needs the user, mark it done with set_goal_done; that stops its sessions and hides the goal from the board. Do not mark a goal done while a session in it needs the user. The user can also mark a goal done or reopen it, and Switchboard tells you in a [switchboard] message. Starting a session with a done goal's name, or sending a message to a session in it, reopens the goal.
+A goal has its own done state, separate from its sessions finishing. When every task of a goal is done and nothing needs the user, mark it done with set_goal_done; that stops its sessions and hides the goal from the board. Do not mark a goal done while a session in it needs the user. The user can also mark a goal done or reopen it, and Switchboard tells you in a [switchboard] message. Starting a session with a done goal's name, or sending a message to a session in it, reopens the goal. When the user says a goal is finished with or will not be done and should go, remove it with remove_goal. The user can also remove a goal, and Switchboard tells you in a [switchboard] message.
 A session is named by its id, the start of its id, or its title.
 You cannot approve permission prompts. When a session needs the user, say which one and what it is asking.
 When the user asks to change how Switchboard looks, use get_theme to see the colour tokens, then save_theme with a name and the colours. Keep text readable against its background.
@@ -150,6 +150,10 @@ var toolDefs = []map[string]any{
 		"inputSchema": obj(map[string]any{
 			"goal": strProp("The goal's name, as given to start_session."),
 			"done": map[string]any{"type": "boolean", "description": "true marks it done, false reopens it. Leave out for true."},
+		}, "goal")},
+	{"name": "remove_goal", "description": "Take a goal and every session in it off the wall, done or not. Stops its sessions, keeps their conversations on disk, drops their checkpoints, and deletes their worktrees and branches. Refuses the whole goal and removes nothing when any of its worktrees has uncommitted changes or unmerged commits, and says which.",
+		"inputSchema": obj(map[string]any{
+			"goal": strProp("The goal's name, as given to start_session."),
 		}, "goal")},
 	{"name": "send_message", "description": "Send a message to a session. Starts or resumes its process if needed, so it also continues a Ready, Interrupted, Failed or Stopped session. If the session is waiting on a permission prompt, the message denies it, with the message as the reason, and the session carries on with the message. If the session is in the middle of a turn, the message waits as pending and reaches it when the turn ends; the reply is Queued. The user can edit, clear or send a pending message early.",
 		"inputSchema": obj(map[string]any{"session": idProp, "text": strProp("The message.")}, "session", "text")},
@@ -302,6 +306,16 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 			return fmt.Sprintf("Reopened %s.", goal), nil
 		}
 		return fmt.Sprintf("%s was already open.", goal), nil
+	case "remove_goal":
+		goal := str("goal")
+		if len(m.hub.goalSessions(goal)) == 0 {
+			return "", fmt.Errorf("no session has the goal %q", goal)
+		}
+		if left := m.hub.goalLeftovers(goal); len(left) > 0 {
+			return "", fmt.Errorf("%s was not removed: %s; ask the user what to do with that work", goal, strings.Join(left, "; "))
+		}
+		n := m.hub.RemoveGoal(goal, true, false)
+		return fmt.Sprintf("Removed %s and its %d sessions.", goal, n), nil
 	case "send_message":
 		a, err := m.find(str("session"))
 		if err != nil {

@@ -253,6 +253,9 @@ func (h *Hub) GoalDone(name string) bool {
 }
 
 func (h *Hub) goalSessions(name string) []*Agent {
+	if name == "" {
+		return nil
+	}
 	var out []*Agent
 	for _, a := range h.Agents() {
 		if a.Snapshot().Meta.Goal == name {
@@ -299,6 +302,53 @@ func (h *Hub) SetGoalDone(name string, done bool, byUser bool) bool {
 		h.flushReports()
 	}
 	return true
+}
+
+func (h *Hub) goalLeftovers(name string) []string {
+	var out []string
+	for _, a := range h.goalSessions(name) {
+		m := a.Snapshot().Meta
+		if m.Worktree == "" {
+			continue
+		}
+		left, err := worktreeLeftovers(m)
+		if err != nil {
+			left = "changes switchboard could not check"
+		}
+		if left != "" {
+			out = append(out, fmt.Sprintf("%s's worktree at %s on branch %s has %s", m.Title, shortPath(worktreeTop(m)), m.WorkBranch, left))
+		}
+	}
+	return out
+}
+
+func (h *Hub) RemoveGoal(name string, keepWork bool, byUser bool) int {
+	if name == "" {
+		return 0
+	}
+	list := h.goalSessions(name)
+	dispatched := slices.ContainsFunc(list, func(a *Agent) bool { return a.Snapshot().Meta.Parent == "dispatcher" })
+	for _, a := range list {
+		m := a.Snapshot().Meta
+		drop := m.Worktree != ""
+		if drop && keepWork {
+			left, err := worktreeLeftovers(m)
+			drop = err == nil && left == ""
+		}
+		h.Remove(a, drop)
+	}
+	h.mu.Lock()
+	delete(h.doneGoals, name)
+	h.mu.Unlock()
+	h.save()
+	h.each(func(v *View) { v.goalsChanged() })
+	if byUser && dispatched {
+		h.mu.Lock()
+		h.reports = append(h.reports, fmt.Sprintf("%s: the user removed the goal and its sessions.", name))
+		h.mu.Unlock()
+		h.flushReports()
+	}
+	return len(list)
 }
 
 func (h *Hub) reopenGoal(name string) {

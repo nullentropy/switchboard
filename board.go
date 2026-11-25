@@ -230,6 +230,7 @@ func (v *View) layoutGoals() {
 				members,
 				caution.Label(map[bool]string{true: "Esc shows all", false: ""}[v.goal == name]).FontSize(11).Color("$accent"),
 				bar,
+				caution.Button("Remove").OnClick(func() { v.confirmRemoveGoal(name) }),
 				caution.Button("Goal done").OnClick(func() { v.markGoalDone(name) }),
 			)))
 	}
@@ -270,6 +271,7 @@ func (v *View) layoutGoals() {
 				caution.Label(name).FontSize(13).Weight(600).Color("$inkDim"),
 				caution.Label(fmt.Sprintf("%d sessions", len(g.states))).FontSize(12).Color("$inkFaint"),
 				caution.Panel().Fill(1),
+				caution.Button("Remove").OnClick(func() { v.confirmRemoveGoal(name) }),
 				caution.Button("Reopen").OnClick(func() { go v.hub.SetGoalDone(name, false, true) }),
 			)))
 	}
@@ -303,8 +305,44 @@ func (v *View) markGoalDone(name string) {
 	))
 }
 
+func (v *View) confirmRemoveGoal(name string) {
+	var titles []string
+	for _, a := range v.hub.goalSessions(name) {
+		titles = append(titles, a.Snapshot().Meta.Title)
+	}
+	remove := func(keepWork bool) func() {
+		return func() {
+			v.closeDialog()
+			if v.goal == name {
+				v.goal = ""
+			}
+			go v.hub.RemoveGoal(name, keepWork, true)
+		}
+	}
+	text := fmt.Sprintf("This stops and removes %s. Their conversations stay on disk, and worktrees with nothing unmerged go too.", strings.Join(titles, ", "))
+	buttons := []*caution.Node{
+		caution.Button("Cancel").OnClick(v.closeDialog),
+		caution.Button("Remove goal").Primary().OnClick(remove(true)),
+	}
+	if left := v.hub.goalLeftovers(name); len(left) > 0 {
+		text += " " + strings.Join(left, ". ") + ". Keep worktrees leaves those worktrees and branches in place. Delete worktrees throws that work away."
+		buttons = []*caution.Node{
+			caution.Button("Cancel").OnClick(v.closeDialog),
+			caution.Button("Delete worktrees").OnClick(remove(false)),
+			caution.Button("Keep worktrees").Primary().OnClick(remove(true)),
+		}
+	}
+	v.showDialog(caution.Dialog("Remove "+name+"?").CardSize(520, 240).Kids(
+		caution.Label(text).FontSize(13).Color("$inkDim").Wrap().Anchor(caution.A{Left: px(20), Right: px(20), Top: px(16)}),
+		caution.HStack().Gap(8).Anchor(caution.A{Right: px(20), Bottom: px(20)}).Kids(buttons...),
+	))
+}
+
 func (v *View) goalsChanged() {
 	v.s.Update(func() {
+		if v.goal != "" && len(v.hub.goalSessions(v.goal)) == 0 {
+			v.goal = ""
+		}
 		v.layoutBoard()
 		v.refreshSummary()
 	})
@@ -585,6 +623,10 @@ func (v *View) paletteItems() []paletteItem {
 	for _, g := range done {
 		name := g.name
 		items = append(items, paletteItem{"Reopen " + name, "", icTarget, func() { go v.hub.SetGoalDone(name, false, true) }, "Goals"})
+	}
+	for _, g := range append(open, done...) {
+		name := g.name
+		items = append(items, paletteItem{"Remove " + name, "", icCircle, func() { v.confirmRemoveGoal(name) }, "Goals"})
 	}
 	if v.project != "" {
 		items = append(items, paletteItem{"All projects", "", icFolder, func() { v.filterProject(v.project) }, "Projects"})
