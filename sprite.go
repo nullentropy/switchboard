@@ -7,6 +7,8 @@ import (
 	"image/color"
 	"image/png"
 	"math"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -44,6 +46,94 @@ type sprite struct {
 	frames int
 	still  int
 	paint  func(c *canvas, i int)
+}
+
+type SpriteDef struct {
+	Frames [][]string `json:"frames"`
+	Still  int        `json:"still,omitempty"`
+}
+
+const maxSpriteFrames = 80
+
+func customSprite(name string, d SpriteDef) sprite {
+	return sprite{name, len(d.Frames), d.Still, func(c *canvas, i int) {
+		c.draw(0, 0, d.Frames[i%len(d.Frames)]...)
+	}}
+}
+
+func builtinSprite(name string) (sprite, bool) {
+	for _, s := range sprites {
+		if s.name == name {
+			return s, true
+		}
+	}
+	return sprite{}, false
+}
+
+func spriteNamed(set Settings, name string) (sprite, bool) {
+	if s, ok := builtinSprite(name); ok {
+		return s, true
+	}
+	if d, ok := set.Sprites[name]; ok && len(d.Frames) > 0 {
+		return customSprite(name, d), true
+	}
+	return sprites[0], false
+}
+
+func spriteNames(set Settings) []string {
+	var names, custom []string
+	for _, s := range sprites {
+		names = append(names, s.name)
+	}
+	for n, d := range set.Sprites {
+		if _, ok := builtinSprite(n); !ok && len(d.Frames) > 0 {
+			custom = append(custom, n)
+		}
+	}
+	sort.Strings(custom)
+	return append(names, custom...)
+}
+
+func spritesOn(set Settings) []string {
+	var on []string
+	for _, n := range spriteNames(set) {
+		if !slices.Contains(set.SpritesOff, n) {
+			on = append(on, n)
+		}
+	}
+	return on
+}
+
+func spritePool(set Settings) []string {
+	if on := spritesOn(set); len(on) > 0 {
+		return on
+	}
+	var all []string
+	for _, s := range sprites {
+		all = append(all, s.name)
+	}
+	return all
+}
+
+func spriteText(sp sprite, i int) []string {
+	var c canvas
+	sp.paint(&c, i)
+	rows := make([]string, spriteH)
+	last := 0
+	for y := range spriteH {
+		b := make([]byte, spriteW)
+		for x := range spriteW {
+			b[x] = ' '
+			if c[y][x] != 0 {
+				b[x] = c[y][x]
+			}
+		}
+		rows[y] = strings.TrimRight(string(b), " ")
+		if rows[y] != "" {
+			last = y + 1
+		}
+	}
+	return rows[:last]
 }
 
 var sprites = []sprite{
@@ -303,8 +393,8 @@ func paintFortyTwo(c *canvas, i int) {
 }
 
 type spriteKey struct {
-	sprite, frame int
-	pal           string
+	c   canvas
+	pal string
 }
 
 var spriteCache = struct {
@@ -327,16 +417,17 @@ func spritePalette(set Settings) (string, map[byte]color.NRGBA) {
 	return sig.String(), cols
 }
 
-func spriteFrame(set Settings, s, i int) string {
+func spriteFrame(set Settings, name string, i int) string {
 	sig, cols := spritePalette(set)
-	key := spriteKey{s, i, sig}
+	sp, _ := spriteNamed(set, name)
+	var c canvas
+	sp.paint(&c, i)
+	key := spriteKey{c, sig}
 	spriteCache.Lock()
 	defer spriteCache.Unlock()
 	if u, ok := spriteCache.m[key]; ok {
 		return u
 	}
-	var c canvas
-	sprites[s].paint(&c, i)
 	img := image.NewNRGBA(image.Rect(0, 0, spriteW*spriteScale, spriteH*spriteScale))
 	for y := range spriteH {
 		for x := range spriteW {

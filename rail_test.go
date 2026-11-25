@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -123,5 +124,21 @@ func TestRemovingTheOpenSessionOpensItsNeighbourInTheSessionList(t *testing.T) {
 		if got := afterRemoval(d, c.sessions, c.removed); got != c.want {
 			t.Errorf("removing %s: got %s, want %s", name[c.removed], name[got], name[c.want])
 		}
+	}
+}
+
+func TestRemovingTheOpenSessionFromItsConversationOpensItsNeighbour(t *testing.T) {
+	d, one, two, three := &Agent{}, &Agent{}, &Agent{}, &Agent{}
+	v := railView(d, one, two, three)
+	v.focus = nil
+	v.header, v.statsRow, v.compact = caution.Panel(), caution.Panel(), caution.Panel()
+	v.layoutBoard()
+	v.openFocus(two)
+	v.removeTile(two)
+	if v.focus == nil || v.focus.a != three {
+		t.Fatal("removing the open session should open the next one")
+	}
+	if v.tiles[two] != nil || slices.Contains(v.shown, two) {
+		t.Fatal("the removed session is still on the board")
 	}
 }

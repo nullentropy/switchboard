@@ -2,6 +2,7 @@ package main
 
 import (
 	"math/rand/v2"
+	"slices"
 	"sync"
 	"time"
 
@@ -20,7 +21,7 @@ var reduceMotion = osReduceMotion
 
 type busyPick struct {
 	turn  time.Time
-	idx   int
+	name  string
 	still bool
 }
 
@@ -29,21 +30,18 @@ var busyPicks = struct {
 	m map[*Agent]busyPick
 }{m: map[*Agent]busyPick{}}
 
-func pickSprite(a *Agent, turn time.Time) busyPick {
+func pickSprite(a *Agent, turn time.Time, set Settings) busyPick {
 	busyPicks.Lock()
 	defer busyPicks.Unlock()
+	pool := spritePool(set)
 	prev, ok := busyPicks.m[a]
-	if ok && prev.turn.Equal(turn) {
+	if ok && prev.turn.Equal(turn) && slices.Contains(pool, prev.name) {
 		return prev
 	}
-	idx := rand.IntN(len(sprites))
-	if ok {
-		idx = rand.IntN(len(sprites) - 1)
-		if idx >= prev.idx {
-			idx++
-		}
+	if ok && len(pool) > 1 {
+		pool = slices.DeleteFunc(slices.Clone(pool), func(n string) bool { return n == prev.name })
 	}
-	p := busyPick{turn: turn, idx: idx, still: reduceMotion()}
+	p := busyPick{turn: turn, name: pool[rand.IntN(len(pool))], still: reduceMotion()}
 	busyPicks.m[a] = p
 	return p
 }
@@ -72,14 +70,16 @@ func (b *busyAnim) set(s Snapshot) {
 		b.stop()
 		return
 	}
-	p := pickSprite(b.f.a, s.TurnFrom)
+	set := b.f.v.set
+	p := pickSprite(b.f.a, s.TurnFrom, set)
 	if b.on && p == b.pick {
 		b.show()
 		return
 	}
 	b.pick, b.frame = p, 0
+	sp, _ := spriteNamed(set, p.name)
 	if p.still {
-		b.frame = sprites[p.idx].still
+		b.frame = sp.still
 	}
 	if !b.on {
 		b.on = true
@@ -87,9 +87,9 @@ func (b *busyAnim) set(s Snapshot) {
 		b.f.activity.Anchor(caution.A{Left: px(busyW + busyPad), Right: px(0), CenterY: px(0)})
 	}
 	if b.f.v.s != nil && !p.still {
-		urls := make([]string, sprites[p.idx].frames)
+		urls := make([]string, sp.frames)
 		for i := range urls {
-			urls[i] = spriteFrame(b.f.v.set, p.idx, i)
+			urls[i] = spriteFrame(set, p.name, i)
 		}
 		b.f.v.s.Preload(urls...)
 	}
@@ -98,7 +98,7 @@ func (b *busyAnim) set(s Snapshot) {
 }
 
 func (b *busyAnim) show() {
-	b.img.SetSrc(spriteFrame(b.f.v.set, b.pick.idx, b.frame))
+	b.img.SetSrc(spriteFrame(b.f.v.set, b.pick.name, b.frame))
 }
 
 func (b *busyAnim) restart() {
@@ -129,7 +129,8 @@ func (b *busyAnim) step(gen int) {
 		b.after(busyHidden)
 		return
 	}
-	b.frame = (b.frame + 1) % sprites[b.pick.idx].frames
+	sp, _ := spriteNamed(b.f.v.set, b.pick.name)
+	b.frame = (b.frame + 1) % sp.frames
 	b.show()
 	b.after(busyFrame)
 }

@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -26,23 +28,27 @@ type Settings struct {
 	LastCwd    string                       `json:"lastCwd"`
 	Themes     map[string]map[string]string `json:"themes,omitempty"`
 	UpdatesOff bool                         `json:"updatesOff,omitempty"`
+	Sprites    map[string]SpriteDef         `json:"sprites,omitempty"`
+	SpritesOff []string                     `json:"spritesOff,omitempty"`
 }
 
 type saved struct {
 	Settings   Settings `json:"settings"`
 	Sessions   []Meta   `json:"sessions"`
 	Dispatcher *Meta    `json:"dispatcher,omitempty"`
+	DoneGoals  []string `json:"doneGoals,omitempty"`
 }
 
 type Hub struct {
 	bins map[string]string
 	path string
 
-	mu       sync.Mutex
-	settings Settings
-	agents   []*Agent
-	views    map[*View]struct{}
-	saveMu   sync.Mutex
+	mu        sync.Mutex
+	settings  Settings
+	agents    []*Agent
+	doneGoals map[string]bool
+	views     map[*View]struct{}
+	saveMu    sync.Mutex
 
 	Dispatcher   *Agent
 	reports      []string
@@ -56,7 +62,7 @@ type Hub struct {
 }
 
 func newHub(bins map[string]string, path string) *Hub {
-	h := &Hub{bins: bins, path: path, views: map[*View]struct{}{},
+	h := &Hub{bins: bins, path: path, views: map[*View]struct{}{}, doneGoals: map[string]bool{},
 		settings: Settings{Theme: "Gruvbox", Sounds: true, Mode: "default"}}
 	b, err := os.ReadFile(path)
 	if path != "" && err == nil {
@@ -65,6 +71,9 @@ func newHub(bins map[string]string, path string) *Hub {
 			log.Printf("read %s: %v", path, err)
 		} else {
 			h.settings = s.Settings
+			for _, g := range s.DoneGoals {
+				h.doneGoals[g] = true
+			}
 			if s.Dispatcher != nil {
 				h.Dispatcher = newAgent(h, *s.Dispatcher)
 				if s.Dispatcher.Launched {
@@ -169,6 +178,7 @@ func (h *Hub) New(m Meta, worktree bool) (*Agent, error) {
 	h.agents = append(h.agents, a)
 	h.settings.LastCwd = cwd
 	h.mu.Unlock()
+	h.reopenGoal(m.Goal)
 	go a.refreshBranch()
 	h.save()
 	h.each(func(v *View) { v.agentAdded(a) })
@@ -236,6 +246,67 @@ func (h *Hub) Remove(a *Agent, dropWorktree bool) {
 	h.each(func(v *View) { v.agentRemoved(a) })
 }
 
+func (h *Hub) GoalDone(name string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return name != "" && h.doneGoals[name]
+}
+
+func (h *Hub) goalSessions(name string) []*Agent {
+	var out []*Agent
+	for _, a := range h.Agents() {
+		if a.Snapshot().Meta.Goal == name {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func (h *Hub) SetGoalDone(name string, done bool, byUser bool) bool {
+	if name == "" {
+		return false
+	}
+	h.mu.Lock()
+	changed := h.doneGoals[name] != done
+	if h.doneGoals == nil {
+		h.doneGoals = map[string]bool{}
+	}
+	if done {
+		h.doneGoals[name] = true
+	} else {
+		delete(h.doneGoals, name)
+	}
+	h.mu.Unlock()
+	if !changed {
+		return false
+	}
+	list := h.goalSessions(name)
+	if done {
+		for _, a := range list {
+			a.Stop()
+		}
+	}
+	h.save()
+	h.each(func(v *View) { v.goalsChanged() })
+	if byUser && slices.ContainsFunc(list, func(a *Agent) bool { return a.Snapshot().Meta.Parent == "dispatcher" }) {
+		what := "marked the goal done; its sessions were stopped"
+		if !done {
+			what = "reopened the goal"
+		}
+		h.mu.Lock()
+		h.reports = append(h.reports, fmt.Sprintf("%s: the user %s.", name, what))
+		h.mu.Unlock()
+		h.flushReports()
+	}
+	return true
+}
+
+func (h *Hub) reopenGoal(name string) {
+	if h.GoalDone(name) {
+		h.SetGoalDone(name, false, false)
+	}
+}
+
 func (h *Hub) Rename(a *Agent, title string) {
 	a.mu.Lock()
 	a.Meta.Title = title
@@ -294,12 +365,18 @@ func (h *Hub) save() {
 	h.mu.Lock()
 	s := saved{Settings: h.settings}
 	agents := append([]*Agent(nil), h.agents...)
+	done := maps.Clone(h.doneGoals)
 	h.mu.Unlock()
 	for _, a := range agents {
 		a.mu.Lock()
 		s.Sessions = append(s.Sessions, a.Meta)
+		if g := a.Meta.Goal; done[g] {
+			s.DoneGoals = append(s.DoneGoals, g)
+			delete(done, g)
+		}
 		a.mu.Unlock()
 	}
+	sort.Strings(s.DoneGoals)
 	if d := h.Dispatcher; d != nil {
 		d.mu.Lock()
 		m := d.Meta

@@ -17,9 +17,11 @@ The user types to you from a command bar. You run the sessions for them with the
 Each session runs one coding agent: claude (Claude Code), codex (OpenAI Codex) or gemini (Gemini CLI). Use the agent the user asks for. Otherwise use claude.
 When the user gives you a goal that needs more than one session, run it as a swarm. Split it into independent tasks that will not edit the same files. Start one session per task with start_session, give every one the same short goal name, and write each first prompt as a complete instruction with the folder, the task, what done means and what not to touch. Then end your turn.
 Switchboard tells you, in a message that starts with [switchboard], when one of your sessions finishes a turn, fails or needs the user. Read its result with read_session. Send a follow-up if it stopped short, start the next task if one depended on it, and when every task of a goal is done, tell the user in two or three sentences what was done and anything that needs them.
+A goal has its own done state, separate from its sessions finishing. When every task of a goal is done and nothing needs the user, mark it done with set_goal_done; that stops its sessions and hides the goal from the board. Do not mark a goal done while a session in it needs the user. The user can also mark a goal done or reopen it, and Switchboard tells you in a [switchboard] message. Starting a session with a done goal's name, or sending a message to a session in it, reopens the goal.
 A session is named by its id, the start of its id, or its title.
 You cannot approve permission prompts. When a session needs the user, say which one and what it is asking.
 When the user asks to change how Switchboard looks, use get_theme to see the colour tokens, then save_theme with a name and the colours. Keep text readable against its background.
+When the user asks for a new busy animation, use get_sprite to see the grid, the palette and example frames, then save_sprite with a name and the frames. delete_sprite removes one the user no longer wants.
 The user's machine has limited CPU and memory, and sessions that compile or run tests can make it unresponsive. Before starting more than one session, check system_load and start only as many as it has room for: when it is busy, start one, and start the rest as earlier ones finish. Switchboard also tells you, in a [switchboard] message, when the machine becomes overloaded and when it recovers. When it is overloaded, start nothing new. If it stays overloaded, interrupt the busiest session that is building or testing and send it a message to wait. When it recovers, tell the sessions you held back to continue, and start the ones you deferred. Tell the user in one sentence when you hold work back for load.
 When you start several sessions in one repository, each one after the first gets its own git worktree and branch unless you set worktree.
 When the user asks to clear finished sessions off the wall, stop each one with stop_session and then remove it with remove_session. remove_session refuses a session whose worktree still has uncommitted changes or unmerged commits; tell the user which ones and what is left.
@@ -95,7 +97,7 @@ func (m *mcpServer) dispatch(req rpcReq) (any, error) {
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
-		return map[string]any{"tools": append(append([]map[string]any(nil), toolDefs...), themeToolDefs...)}, nil
+		return map[string]any{"tools": append(append(append([]map[string]any(nil), toolDefs...), themeToolDefs...), spriteToolDefs...)}, nil
 	case "tools/call":
 		var p struct {
 			Name      string         `json:"name"`
@@ -137,13 +139,18 @@ var toolDefs = []map[string]any{
 		"inputSchema": obj(map[string]any{
 			"folder":          strProp("Absolute path or ~/path of an existing folder."),
 			"title":           strProp("A short name for the tile. Defaults to the folder's name."),
-			"goal":            strProp("A short name for the goal this session is part of. Sessions with the same goal are shown together."),
+			"goal":            strProp("A short name for the goal this session is part of. Sessions with the same goal are shown together. Using the name of a done goal reopens it."),
 			"prompt":          strProp("The first message. Make it a complete instruction."),
 			"agent":           strProp("Which coding agent runs it: claude, codex or gemini. Leave out for claude."),
 			"model":           strProp("A model name the chosen agent accepts. Leave out for its default."),
 			"permission_mode": strProp("default, acceptEdits, auto or plan. Leave out for the user's default."),
 			"worktree":        map[string]any{"type": "boolean", "description": "Run it in its own git worktree on a new branch. Leave out to get one only when another session already works in the same repository."},
 		}, "folder", "prompt")},
+	{"name": "set_goal_done", "description": "Mark a goal done, or reopen it. Done is the goal's own state, separate from its sessions finishing their turns. Marking it done stops every session in it, keeps their conversations, and hides the goal and its sessions from the board until it is reopened. A goal also reopens when one of its sessions starts a turn or a new session is started with its name.",
+		"inputSchema": obj(map[string]any{
+			"goal": strProp("The goal's name, as given to start_session."),
+			"done": map[string]any{"type": "boolean", "description": "true marks it done, false reopens it. Leave out for true."},
+		}, "goal")},
 	{"name": "send_message", "description": "Send a message to a session. Starts or resumes its process if needed, so it also continues a Ready, Interrupted, Failed or Stopped session. If the session is waiting on a permission prompt, the message denies it, with the message as the reason, and the session carries on with the message. If the session is in the middle of a turn, the message waits as pending and reaches it when the turn ends; the reply is Queued. The user can edit, clear or send a pending message early.",
 		"inputSchema": obj(map[string]any{"session": idProp, "text": strProp("The message.")}, "session", "text")},
 	{"name": "interrupt_session", "description": "Stop the session's current turn. The process stays up.",
@@ -188,7 +195,7 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 		for _, a := range m.hub.Agents() {
 			s := a.Snapshot()
 			row := map[string]any{
-				"id": s.Meta.ID, "title": s.Meta.Title, "agent": providerOf(s.Meta), "goal": s.Meta.Goal, "folder": s.Meta.Cwd, "branch": s.Branch,
+				"id": s.Meta.ID, "title": s.Meta.Title, "agent": providerOf(s.Meta), "goal": s.Meta.Goal, "goal_done": m.hub.GoalDone(s.Meta.Goal), "folder": s.Meta.Cwd, "branch": s.Branch,
 				"state": s.State.String(), "activity": s.Activity, "permission_mode": s.Meta.Mode,
 				"last_reply": oneLine(lastReply(s.Entries)), "cost_usd": fmt.Sprintf("%.2f", s.Cost),
 			}
@@ -276,6 +283,25 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 			where += " on its own branch " + s.Meta.WorkBranch
 		}
 		return fmt.Sprintf("Started %s (%s) in %s.", s.Meta.Title, s.Meta.ID, where), nil
+	case "set_goal_done":
+		goal := str("goal")
+		if len(m.hub.goalSessions(goal)) == 0 {
+			return "", fmt.Errorf("no session has the goal %q", goal)
+		}
+		done := true
+		if b, ok := args["done"].(bool); ok {
+			done = b
+		}
+		changed := m.hub.SetGoalDone(goal, done, false)
+		switch {
+		case done && changed:
+			return fmt.Sprintf("Marked %s done and stopped its sessions.", goal), nil
+		case done:
+			return fmt.Sprintf("%s was already done.", goal), nil
+		case changed:
+			return fmt.Sprintf("Reopened %s.", goal), nil
+		}
+		return fmt.Sprintf("%s was already open.", goal), nil
 	case "send_message":
 		a, err := m.find(str("session"))
 		if err != nil {
@@ -297,6 +323,8 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 		return "Interrupted.", nil
 	case "get_theme", "save_theme":
 		return m.themeCall(name, args)
+	case "get_sprite", "save_sprite", "delete_sprite":
+		return m.spriteCall(name, args)
 	case "stop_session":
 		a, err := m.find(str("session"))
 		if err != nil {

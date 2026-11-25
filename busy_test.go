@@ -33,8 +33,8 @@ func TestEverySpriteHasAVisibleStillFrameAndMoves(t *testing.T) {
 }
 
 func TestSpriteFramesFollowTheTheme(t *testing.T) {
-	dark := spriteFrame(Settings{Theme: "Graphite"}, 0, 0)
-	light := spriteFrame(Settings{Theme: "Paper"}, 0, 0)
+	dark := spriteFrame(Settings{Theme: "Graphite"}, "towel", 0)
+	light := spriteFrame(Settings{Theme: "Paper"}, "towel", 0)
 	if dark == light {
 		t.Fatal("Graphite and Paper render the same frame")
 	}
@@ -45,14 +45,14 @@ func TestSpritePickHoldsForATurnAndNeverRepeatsNext(t *testing.T) {
 	defer func() { reduceMotion = osReduceMotion }()
 	a := &Agent{}
 	turn := time.Now()
-	prev := pickSprite(a, turn)
-	if again := pickSprite(a, turn); again != prev {
-		t.Fatalf("same turn picked %d then %d", prev.idx, again.idx)
+	prev := pickSprite(a, turn, Settings{})
+	if again := pickSprite(a, turn, Settings{}); again != prev {
+		t.Fatalf("same turn picked %s then %s", prev.name, again.name)
 	}
 	for n := 1; n <= 200; n++ {
-		p := pickSprite(a, turn.Add(time.Duration(n)*time.Second))
-		if p.idx == prev.idx {
-			t.Fatalf("turn %d repeated sprite %d", n, p.idx)
+		p := pickSprite(a, turn.Add(time.Duration(n)*time.Second), Settings{})
+		if p.name == prev.name {
+			t.Fatalf("turn %d repeated sprite %s", n, p.name)
 		}
 		prev = p
 	}
@@ -76,7 +76,7 @@ func TestBusySpriteShowsOnlyWhileWorking(t *testing.T) {
 		if f.busy.timer != nil {
 			t.Fatalf("%v: reduced motion still runs a frame timer", st)
 		}
-		if f.busy.frame != sprites[f.busy.pick.idx].still {
+		if sp, _ := spriteNamed(Settings{}, f.busy.pick.name); f.busy.frame != sp.still {
 			t.Fatalf("%v: reduced motion shows frame %d, want the still frame", st, f.busy.frame)
 		}
 	}

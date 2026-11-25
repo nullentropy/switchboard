@@ -73,6 +73,7 @@ func (v *View) display() []*Agent {
 	for _, g := range []string{"need", "work", "wait", "fail", "int", "done", "idle"} {
 		for _, a := range v.order {
 			if t := v.tiles[a]; t != nil && groupOf(t.state) == g && (v.goal == "" || t.snap.Meta.Goal == v.goal) &&
+				(t.snap.Meta.Goal == v.goal || !v.hub.GoalDone(t.snap.Meta.Goal)) &&
 				(v.project == "" || projectOf(t.snap.Meta) == v.project) {
 				out = append(out, a)
 			}
@@ -162,14 +163,14 @@ func hints(hs [][2]string) *caution.Node {
 	return row
 }
 
-func (v *View) layoutGoals() {
-	v.goals.Clear()
-	type goal struct {
-		name   string
-		states []State
-		names  []string
-	}
-	byName := map[string]*goal{}
+type goalRow struct {
+	name   string
+	states []State
+	titles []string
+}
+
+func (v *View) goalRows() (open, done []*goalRow) {
+	byName := map[string]*goalRow{}
 	var names []string
 	for _, a := range v.order {
 		t := v.tiles[a]
@@ -178,47 +179,135 @@ func (v *View) layoutGoals() {
 		}
 		g := byName[t.snap.Meta.Goal]
 		if g == nil {
-			g = &goal{name: t.snap.Meta.Goal}
+			g = &goalRow{name: t.snap.Meta.Goal}
 			byName[g.name] = g
 			names = append(names, g.name)
 		}
 		g.states = append(g.states, t.state)
-		g.names = append(g.names, clip(t.snap.Meta.Title, 18))
+		g.titles = append(g.titles, clip(t.snap.Meta.Title, 18))
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		g := byName[name]
-		done := 0
+		if v.hub.GoalDone(name) {
+			done = append(done, byName[name])
+		} else {
+			open = append(open, byName[name])
+		}
+	}
+	return open, done
+}
+
+func (v *View) layoutGoals() {
+	v.goals.Clear()
+	open, done := v.goalRows()
+	for _, g := range open {
+		finished := 0
 		bar := caution.HStack().Gap(3).W(260).H(6)
 		members := caution.HStack().Gap(6).Align("center").Fill(1).Clips()
 		for i, st := range g.states {
 			if st == Ready {
-				done++
+				finished++
 			}
 			bar.Add(caution.Panel().Fill(1).H(6).Radius(3).Bg("$" + stateToken(st)))
-			name := g.names[i]
-			members.Add(caution.Panel().W(textW(name, 12, false)+28).H(24).Bg("$panelAlt").Radius(12).Kids(
+			title := g.titles[i]
+			members.Add(caution.Panel().W(textW(title, 12, false)+28).H(24).Bg("$panelAlt").Radius(12).Kids(
 				caution.Panel().W(7).H(7).Radius(3.5).Bg("$"+stateToken(st)).Anchor(caution.A{Left: px(9), CenterY: px(0)}),
-				caution.Label(name).FontSize(12).Color("$inkDim").Anchor(caution.A{Left: px(21), CenterY: px(0)}),
+				caution.Label(title).FontSize(12).Color("$inkDim").Anchor(caution.A{Left: px(21), CenterY: px(0)}),
 			))
 		}
 		hint := "Show only this goal"
 		border := "$edgeSoft"
-		if v.goal == name {
+		if v.goal == g.name {
 			hint, border = "Showing only this goal  ·  Esc shows all", "$accent"
 		}
-		name := name
+		name := g.name
 		v.goals.Add(caution.Panel().H(52).Bg("$panel").Radius(10).Border(border, 1).Kids(
 			caution.Glass().HoverFill("$hover").Anchor(fill()).Tip(hint).OnPick(func(_, _ float64, _ *caution.Node) { v.filterGoal(name) }),
 			caution.HStack().Gap(14).Align("center").Anchor(caution.A{Left: px(16), Right: px(16), CenterY: px(0)}).Kids(
 				icon(icTarget, 16, "$accent"),
 				caution.Label(name).FontSize(14).Weight(620),
-				caution.Label(fmt.Sprintf("%d of %d done", done, len(g.states))).FontSize(12).Color("$inkDim"),
+				caution.Label(fmt.Sprintf("%d of %d sessions finished", finished, len(g.states))).FontSize(12).Color("$inkDim"),
 				members,
 				caution.Label(map[bool]string{true: "Esc shows all", false: ""}[v.goal == name]).FontSize(11).Color("$accent"),
 				bar,
+				caution.Button("Goal done").OnClick(func() { v.markGoalDone(name) }),
 			)))
 	}
+	if len(done) == 0 {
+		return
+	}
+	label := fmt.Sprintf("%d done goals", len(done))
+	if len(done) == 1 {
+		label = "1 done goal"
+	}
+	tip := "Show done goals"
+	if v.showDone {
+		tip = "Hide done goals"
+	}
+	v.goals.Add(caution.Panel().H(32).Kids(
+		caution.Glass().HoverFill("$hover").Anchor(fill()).Tip(tip).OnPick(func(_, _ float64, _ *caution.Node) {
+			v.showDone = !v.showDone
+			v.layoutBoard()
+		}),
+		caution.HStack().Gap(8).Align("center").Anchor(caution.A{Left: px(16), CenterY: px(0)}).Kids(
+			icon(icCheck, 14, "$inkDim"),
+			caution.Label(label).FontSize(12).Weight(600).Color("$inkDim"),
+			caution.Label(map[bool]string{true: "hide", false: "show"}[v.showDone]).FontSize(11).Color("$inkFaint"),
+		)))
+	if !v.showDone {
+		return
+	}
+	for _, g := range done {
+		name := g.name
+		hint, border := "Show this goal's sessions", "$edgeSoft"
+		if v.goal == name {
+			hint, border = "Showing this goal's sessions  ·  Esc shows all", "$accent"
+		}
+		v.goals.Add(caution.Panel().H(44).Bg("$panel").Radius(10).Border(border, 1).Kids(
+			caution.Glass().HoverFill("$hover").Anchor(fill()).Tip(hint).OnPick(func(_, _ float64, _ *caution.Node) { v.filterGoal(name) }),
+			caution.HStack().Gap(14).Align("center").Anchor(caution.A{Left: px(16), Right: px(16), CenterY: px(0)}).Kids(
+				icon(icCheck, 14, "$inkDim"),
+				caution.Label(name).FontSize(13).Weight(600).Color("$inkDim"),
+				caution.Label(fmt.Sprintf("%d sessions", len(g.states))).FontSize(12).Color("$inkFaint"),
+				caution.Panel().Fill(1),
+				caution.Button("Reopen").OnClick(func() { go v.hub.SetGoalDone(name, false, true) }),
+			)))
+	}
+}
+
+func (v *View) markGoalDone(name string) {
+	var live []string
+	for _, a := range v.hub.goalSessions(name) {
+		switch s := a.Snapshot(); s.State {
+		case Working, Starting, NeedsYou, Waiting:
+			live = append(live, s.Meta.Title)
+		}
+	}
+	finish := func() {
+		if v.goal == name {
+			v.goal = ""
+		}
+		go v.hub.SetGoalDone(name, true, true)
+	}
+	if len(live) == 0 {
+		finish()
+		return
+	}
+	v.showDialog(caution.Dialog("Mark "+name+" done?").CardSize(460, 190).Kids(
+		caution.Label(fmt.Sprintf("This stops %s, which %s not finished. Their conversations stay, and the goal can be reopened.", strings.Join(live, ", "), map[bool]string{true: "has", false: "have"}[len(live) == 1])).
+			FontSize(13).Color("$inkDim").Wrap().Anchor(caution.A{Left: px(20), Right: px(20), Top: px(16)}),
+		caution.HStack().Gap(8).Anchor(caution.A{Right: px(20), Bottom: px(20)}).Kids(
+			caution.Button("Cancel").OnClick(v.closeDialog),
+			caution.Button("Mark done").Primary().OnClick(func() { v.closeDialog(); finish() }),
+		),
+	))
+}
+
+func (v *View) goalsChanged() {
+	v.s.Update(func() {
+		v.layoutBoard()
+		v.refreshSummary()
+	})
 }
 
 func (v *View) select_(a *Agent) {
@@ -487,6 +576,15 @@ func (v *View) paletteItems() []paletteItem {
 		}
 		items = append(items, paletteItem{s.Meta.Title + "  ·  " + providerName(s.Meta.Provider) + "  ·  " + s.State.String(),
 			hint, stateIcon(s.State), func() { v.select_(a); v.openFocus(a) }, "Sessions"})
+	}
+	open, done := v.goalRows()
+	for _, g := range open {
+		name := g.name
+		items = append(items, paletteItem{"Mark " + name + " done", "", icCheck, func() { v.markGoalDone(name) }, "Goals"})
+	}
+	for _, g := range done {
+		name := g.name
+		items = append(items, paletteItem{"Reopen " + name, "", icTarget, func() { go v.hub.SetGoalDone(name, false, true) }, "Goals"})
 	}
 	if v.project != "" {
 		items = append(items, paletteItem{"All projects", "", icFolder, func() { v.filterProject(v.project) }, "Projects"})

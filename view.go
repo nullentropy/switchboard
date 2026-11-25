@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,6 +50,7 @@ type View struct {
 	native                     bool
 	header, statsRow, compact  *caution.Node
 	goal                       string
+	showDone                   bool
 	focus                      *focusView
 	shell, holder, railList    *caution.Node
 	project                    string
@@ -391,31 +393,37 @@ func (v *View) agentAdded(a *Agent) {
 
 func (v *View) agentRemoved(a *Agent) {
 	v.s.Update(func() {
-		if v.tiles[a] == nil {
-			return
+		if v.removeTile(a) {
+			v.syncEmpty()
+			v.refreshSummary()
 		}
-		var next *Agent
-		if v.focus != nil && v.focus.a == a {
-			list, _ := v.railOrder()
-			next = afterRemoval(v.hub.Dispatcher, list, a)
-		}
-		delete(v.tiles, a)
-		for i, x := range v.order {
-			if x == a {
-				v.order = append(v.order[:i:i], v.order[i+1:]...)
-				break
-			}
-		}
-		if v.sel == a {
-			v.sel = nil
-		}
-		if next != nil {
-			v.switchTo(next)
-		}
-		v.layoutBoard()
-		v.syncEmpty()
-		v.refreshSummary()
 	})
+}
+
+func (v *View) removeTile(a *Agent) bool {
+	if v.tiles[a] == nil {
+		return false
+	}
+	var next *Agent
+	if v.focus != nil && v.focus.a == a {
+		list, _ := v.railOrder()
+		next = afterRemoval(v.hub.Dispatcher, list, a)
+	}
+	delete(v.tiles, a)
+	for i, x := range v.order {
+		if x == a {
+			v.order = append(v.order[:i:i], v.order[i+1:]...)
+			break
+		}
+	}
+	if v.sel == a {
+		v.sel = nil
+	}
+	v.layoutBoard()
+	if next != nil {
+		v.switchTo(next)
+	}
+	return true
 }
 
 func (v *View) agentChanged(a *Agent) {
@@ -548,8 +556,15 @@ func indexOf(xs []string, x string) int {
 
 func (v *View) openNew() {
 	set := v.hub.Settings()
-	cwd := set.LastCwd
-	if cwd == "" {
+	here := ""
+	if v.focus != nil {
+		here = sessionFolder(v.focus.a.Snapshot().Meta)
+	}
+	recent := v.hub.recentFolders(here)
+	cwd := ""
+	if len(recent) > 0 {
+		cwd = recent[0]
+	} else {
 		cwd, _ = os.Getwd()
 	}
 	model, mode, provider := set.Model, set.Mode, set.Provider
@@ -557,10 +572,9 @@ func (v *View) openNew() {
 		mode = "default"
 	}
 	folder := caution.TextField(cwd).Placeholder("/path/to/repo")
-	title := caution.TextField("").Placeholder(filepath.Base(cwd))
-	prompt := caution.Textarea("").Placeholder("What should it do? (optional)").Rows(5).EnterSends()
+	prompt := caution.Textarea("").Placeholder("What should it do? The first line names the session (optional)").Rows(5).EnterSends()
 	errL := caution.Label("").FontSize(12).Color("$stFail")
-	for _, f := range []*caution.Node{folder, title, prompt} {
+	for _, f := range []*caution.Node{folder, prompt} {
 		f.OnInput(func(string) {})
 	}
 	labels := make([]string, len(providers))
@@ -596,11 +610,31 @@ func (v *View) openNew() {
 	goalF.OnInput(func(string) {})
 	wt := v.hub.RepoBusy(expandHome(cwd))
 	wtBox := caution.Checkbox("Separate worktree on a new branch", wt).OnToggle(func(b bool) { wt = b })
-	folder.OnInput(func(s string) {
-		title.Placeholder(filepath.Base(strings.TrimSpace(s)))
+	pickFolder := func(s string) {
 		wt = v.hub.RepoBusy(expandHome(strings.TrimSpace(s)))
 		wtBox.SetChecked(wt)
-	})
+	}
+	folder.OnInput(pickFolder)
+	folderBox := caution.Panel().H(32)
+	if len(recent) > 0 {
+		names := make([]string, len(recent), len(recent)+1)
+		for i, p := range recent {
+			names[i] = shortPath(p)
+		}
+		names = append(names, "Other…")
+		folderBox.Add(caution.Select(names, 0).OnSelect(func(i int) {
+			if i == len(recent) {
+				folderBox.Clear()
+				folderBox.Add(folder.Anchor(fill()))
+				folder.Focus()
+				return
+			}
+			folder.SetValue(recent[i])
+			pickFolder(recent[i])
+		}).Anchor(fill()))
+	} else {
+		folderBox.Add(folder.Anchor(fill()))
+	}
 	start := func() {
 		dir := expandHome(strings.TrimSpace(valueOf(folder)))
 		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
@@ -612,7 +646,7 @@ func (v *View) openNew() {
 			return
 		}
 		v.hub.UpdateSettings(func(s *Settings) { s.Model, s.Mode, s.Provider = model, mode, provider })
-		a, err := v.hub.New(Meta{Provider: provider, Title: strings.TrimSpace(valueOf(title)), Cwd: dir, Model: model, Mode: mode, Goal: strings.TrimSpace(valueOf(goalF))}, wt)
+		a, err := v.hub.New(Meta{Provider: provider, Title: titleFrom(valueOf(prompt), dir), Cwd: dir, Model: model, Mode: mode, Goal: strings.TrimSpace(valueOf(goalF))}, wt)
 		if err != nil {
 			errL.SetText(err.Error())
 			return
@@ -624,15 +658,14 @@ func (v *View) openNew() {
 			v.openFocus(a)
 		}
 	}
-	for _, f := range []*caution.Node{prompt, folder, title, goalF} {
+	for _, f := range []*caution.Node{prompt, folder, goalF} {
 		f.OnSubmit(func(string) { start() })
 	}
 
 	lbl := func(s string) *caution.Node { return caution.Label(s).FontSize(13).Color("$inkDim") }
 	form := caution.Grid([]caution.GridCol{{Px: 90}, {Weight: 1, Align: "stretch"}}).ColGap(12).RowGap(10).
 		Anchor(caution.A{Left: px(20), Right: px(20), Top: px(16)}).Kids(
-		lbl("Folder"), folder,
-		lbl("Name"), title,
+		lbl("Folder"), folderBox,
 		lbl("Agent"), provSel,
 		lbl("Model"), modelBox,
 		lbl("Permissions"), modeSel,
@@ -640,7 +673,7 @@ func (v *View) openNew() {
 		lbl("Worktree"), wtBox,
 		lbl("Prompt"), prompt,
 	)
-	d := caution.Dialog("New session").CardSize(560, 512).Kids(
+	d := caution.Dialog("New session").CardSize(560, 470).Kids(
 		form,
 		errL.Anchor(caution.A{Left: px(20), Bottom: px(26)}),
 		caution.HStack().Gap(8).Anchor(caution.A{Right: px(20), Bottom: px(20)}).Kids(
@@ -649,7 +682,7 @@ func (v *View) openNew() {
 		),
 	)
 	v.showDialog(d)
-	folder.Focus()
+	prompt.Focus()
 }
 
 func (v *View) openRename(a *Agent) {
@@ -673,6 +706,28 @@ func (v *View) openRename(a *Agent) {
 	field.Focus()
 }
 
+const spriteCheckH = 24
+
+func (v *View) spriteChecks(set Settings) (*caution.Node, float64) {
+	names, on := spriteNames(set), spritesOn(set)
+	var checks []*caution.Node
+	for _, name := range names {
+		var cb *caution.Node
+		cb = caution.Checkbox(name, slices.Contains(on, name)).H(spriteCheckH).OnToggle(func(b bool) {
+			kept := true
+			v.hub.UpdateSettings(func(s *Settings) { kept = setSpriteOn(s, name, b) })
+			if !kept {
+				cb.SetChecked(true)
+			}
+		})
+		checks = append(checks, cb)
+	}
+	h := float64(min((len(names)+1)/2, 5) * spriteCheckH)
+	grid := caution.Grid([]caution.GridCol{{Weight: 1}, {Weight: 1}}).ColGap(8).
+		Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)}).Kids(checks...)
+	return caution.Scroll().H(h).Kids(grid), h
+}
+
 func (v *View) openSettings() {
 	set := v.hub.Settings()
 	names := themeNames(set)
@@ -694,13 +749,15 @@ func (v *View) openSettings() {
 		v.hub.UpdateSettings(func(s *Settings) { s.UpdatesOff = !b })
 	})
 	lbl := func(s string) *caution.Node { return caution.Label(s).FontSize(13).Color("$inkDim") }
-	d := caution.Dialog("Settings").CardSize(480, 276).Kids(
+	spr, sprH := v.spriteChecks(set)
+	d := caution.Dialog("Settings").CardSize(480, 288+sprH).Kids(
 		caution.Grid([]caution.GridCol{{Px: 120}, {Weight: 1, Align: "stretch"}}).ColGap(12).RowGap(12).
 			Anchor(caution.A{Left: px(20), Right: px(20), Top: px(18)}).Kids(
 			lbl("Theme"), theme,
 			lbl("Sound"), snd,
 			lbl("Dispatcher model"), dmodel,
 			lbl("Updates"), upd,
+			lbl("Sprites"), spr,
 		),
 		caution.Button("Done").Primary().Anchor(caution.A{Right: px(20), Bottom: px(20)}).OnClick(v.closeDialog),
 	)

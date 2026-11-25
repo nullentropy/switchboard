@@ -471,7 +471,9 @@ func (a *Agent) SendFrom(text, from string) {
 	a.TurnFrom = time.Now()
 	a.Err = ""
 	a.Meta.ResumeAt = time.Time{}
+	goal := a.Meta.Goal
 	a.mu.Unlock()
+	a.hub.reopenGoal(goal)
 	if old != nil {
 		old.stop()
 	}
