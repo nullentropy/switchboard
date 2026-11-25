@@ -220,3 +220,21 @@ func (m *mentions) tab(_ bool, value string, caret int) bool {
 	m.pick(m.matches[0], caret)
 	return true
 }
+
+func (m *mentions) exact(value string) bool {
+	if !m.slash {
+		return false
+	}
+	w := strings.Fields(value)
+	if len(w) == 0 {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, c := range m.cmds {
+		if "/"+c.Name == w[0] {
+			return true
+		}
+	}
+	return false
+}

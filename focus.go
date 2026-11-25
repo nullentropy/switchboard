@@ -190,7 +190,7 @@ func (f *focusView) build() {
 }
 
 func (f *focusView) submit(s string) {
-	if f.mention.tab(false, s, -1) {
+	if !f.mention.exact(s) && f.mention.tab(false, s, -1) {
 		return
 	}
 	f.send(s)
