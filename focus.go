@@ -746,7 +746,7 @@ func (f *focusView) ask(p *Pending) {
 		}
 		send.SetProp("primary", form.ready())
 	}
-	list := caution.VStack().Gap(10).Align("stretch").Anchor(caution.A{Left: px(0), Right: px(10), Top: px(0)})
+	list := caution.VStack().Gap(10).Align("stretch").Anchor(caution.A{Left: px(0), Right: px(30), Top: px(0)})
 	h := 120.0
 	for qi, q := range p.Questions {
 		if qi > 0 {
