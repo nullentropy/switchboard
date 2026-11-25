@@ -746,7 +746,7 @@ func (f *focusView) ask(p *Pending) {
 		}
 		send.SetProp("primary", form.ready())
 	}
-	list := caution.VStack().Gap(10).Align("stretch").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)})
+	list := caution.VStack().Gap(10).Align("stretch").Anchor(caution.A{Left: px(0), Right: px(10), Top: px(0)})
 	h := 120.0
 	for qi, q := range p.Questions {
 		if qi > 0 {
@@ -777,7 +777,7 @@ func (f *focusView) ask(p *Pending) {
 	}
 	send.OnClick(form.submit)
 	d := caution.Dialog(f.name()+" is asking").CardSize(askW, min(h, 680)).Kids(
-		caution.Scroll().Anchor(caution.A{Left: px(20), Right: px(20), Top: px(12), Bottom: px(64)}).Kids(list),
+		caution.Scroll().Anchor(caution.A{Left: px(20), Right: px(10), Top: px(12), Bottom: px(64)}).Kids(list),
 		caution.HStack().Gap(8).Anchor(caution.A{Right: px(20), Bottom: px(18)}).Kids(
 			caution.Button("Skip").Tip("Decline to answer").OnClick(func() { v.closeDialog(); a.Answer(p.ReqID, false, false, nil) }),
 			send,
