@@ -248,10 +248,15 @@ func (h *Hub) Rename(a *Agent, title string) {
 // before, so the next launch shows it.
 func (h *Hub) StopAll() {
 	h.quitting.Store(true)
-	for _, a := range h.Agents() {
-		a.kill()
+	var wg sync.WaitGroup
+	for _, a := range append(h.Agents(), h.Dispatcher) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a.kill()
+		}()
 	}
-	h.Dispatcher.kill()
+	wg.Wait()
 }
 
 // takeInterrupted returns the sessions that were mid-turn when Switchboard

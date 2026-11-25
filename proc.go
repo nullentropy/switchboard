@@ -86,9 +86,24 @@ func (p *proc) stop() {
 		select {
 		case <-p.done:
 		case <-time.After(3 * time.Second):
-			_ = p.cmd.Process.Kill()
+			killTree(p.cmd.Process)
 		}
 	}()
+}
+
+func (p *proc) end(grace time.Duration) {
+	_ = p.stdin.Close()
+	terminateTree(p.cmd.Process)
+	select {
+	case <-p.done:
+		return
+	case <-time.After(grace):
+	}
+	killTree(p.cmd.Process)
+	select {
+	case <-p.done:
+	case <-time.After(grace):
+	}
 }
 
 func (p *proc) envelope(m map[string]any) map[string]any {

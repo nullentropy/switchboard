@@ -37,12 +37,16 @@ func claudeInitialize(bin, dir string) (*claudeInit, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := cmd.Start(); err != nil {
+	cmd.Cancel = func() error {
+		killTree(cmd.Process)
+		return nil
+	}
+	if err := startProcess(cmd, false); err != nil {
 		return nil, err
 	}
 	defer func() {
 		stdin.Close()
-		cmd.Process.Kill()
+		killTree(cmd.Process)
 		cmd.Wait()
 	}()
 	req, _ := json.Marshal(map[string]any{"type": "control_request", "request_id": "commands", "request": map[string]any{"subtype": "initialize"}})

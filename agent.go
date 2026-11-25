@@ -586,7 +586,7 @@ func (a *Agent) kill() {
 	a.stopped = true
 	a.mu.Unlock()
 	if p != nil {
-		p.stop()
+		p.end(time.Second)
 	}
 }
 

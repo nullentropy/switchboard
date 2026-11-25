@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"syscall"
-	"time"
 
 	caution "github.com/nullentropy/caution"
 	"github.com/nullentropy/caution/native"
@@ -52,9 +51,13 @@ func main() {
 		log.Fatalf("start the dispatcher's tool server: %v", err)
 	}
 	hub.Dispatcher.extraArgs = func() []string { return dispatcherArgs(mcpURL) }
-	defer func() {
+	defer hub.StopAll()
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+		<-sig
 		hub.StopAll()
-		time.Sleep(500 * time.Millisecond)
+		os.Exit(0)
 	}()
 
 	caution.ServeClient()
@@ -73,14 +76,6 @@ func main() {
 		return
 	}
 
-	go func() {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-		<-sig
-		hub.StopAll()
-		time.Sleep(500 * time.Millisecond)
-		os.Exit(0)
-	}()
 	log.Printf("switchboard listening on %s", *addr)
 	log.Fatal(caution.Serve(*addr, mountView(hub, false)))
 }
@@ -125,7 +120,6 @@ func startUpdates(hub *Hub, flushWindow *func()) {
 			(*flushWindow)()
 		}
 		hub.StopAll()
-		time.Sleep(500 * time.Millisecond)
 		return relaunch(exe)
 	}
 	go hub.watchUpdates(u)

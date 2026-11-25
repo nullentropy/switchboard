@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -29,4 +31,12 @@ func startProcess(cmd *exec.Cmd, low bool) error {
 		cmd.SysProcAttr.CreationFlags |= windows.BELOW_NORMAL_PRIORITY_CLASS
 	}
 	return cmd.Start()
+}
+
+func terminateTree(p *os.Process) {}
+
+func killTree(p *os.Process) {
+	if command("taskkill", "/T", "/F", "/PID", strconv.Itoa(p.Pid)).Run() != nil {
+		_ = p.Kill()
+	}
 }
