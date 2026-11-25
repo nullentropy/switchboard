@@ -498,7 +498,7 @@ func (f *focusView) addEntry(e Entry) shown {
 		body.Add(caution.RichText(markdownSpans(e.Text)...).FontSize(14).Selectable())
 	case EntryError:
 		gutter.SetText("Error").SetColor("$stFail")
-		body.Add(caution.RichText(caution.Span{Text: e.Text}).FontSize(13).Color("$stFail").Selectable())
+		body.Add(caution.RichText(caution.Span{Text: e.Text, Mono: true}).FontSize(13).Color("$stFail").Selectable())
 	}
 	f.list.Add(caution.HStack().Gap(12).Kids(gutter, body))
 	return shown{rev: e.Rev, gutter: gutter, body: body}

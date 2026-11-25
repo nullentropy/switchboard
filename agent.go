@@ -825,9 +825,30 @@ func oneLine(s string) string {
 	return s
 }
 
+func expandTabs(ln string) string {
+	if !strings.Contains(ln, "\t") {
+		return ln
+	}
+	var b strings.Builder
+	col := 0
+	for _, r := range ln {
+		if r == '\t' {
+			n := 8 - col%8
+			b.WriteString(strings.Repeat(" ", n))
+			col += n
+			continue
+		}
+		b.WriteRune(r)
+		col++
+	}
+	return b.String()
+}
+
 func trimLines(s string, lines, chars int) string {
-	s = strings.ReplaceAll(strings.TrimRight(s, "\n "), "\t", "    ")
-	ls := strings.Split(s, "\n")
+	ls := strings.Split(strings.TrimRight(s, "\n "), "\n")
+	for i, ln := range ls {
+		ls[i] = expandTabs(ln)
+	}
 	cut := false
 	if len(ls) > lines {
 		ls, cut = ls[:lines], true

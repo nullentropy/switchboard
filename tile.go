@@ -37,7 +37,7 @@ func textW(s string, size float64, mono bool) float64 {
 	if mono {
 		per = size * 0.62
 	}
-	return float64(len([]rune(s))) * per
+	return float64(len([]rune(expandTabs(s)))) * per
 }
 
 func kbd(keys string) *caution.Node {
