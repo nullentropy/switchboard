@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -172,6 +173,44 @@ func (h *Hub) New(m Meta, worktree bool) (*Agent, error) {
 	h.save()
 	h.each(func(v *View) { v.agentAdded(a) })
 	return a, nil
+}
+
+func sessionFolder(m Meta) string {
+	if m.WorkBranch != "" && m.Repo != "" {
+		return m.Repo
+	}
+	return m.Cwd
+}
+
+func (h *Hub) recentFolders(first string) []string {
+	var metas []Meta
+	for _, a := range h.Agents() {
+		metas = append(metas, a.Snapshot().Meta)
+	}
+	sort.SliceStable(metas, func(i, j int) bool { return metas[i].Created.After(metas[j].Created) })
+	var out []string
+	seen := map[string]bool{}
+	add := func(p string) {
+		if p != "" && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	add(first)
+	add(h.Settings().LastCwd)
+	for _, m := range metas {
+		add(sessionFolder(m))
+	}
+	return out
+}
+
+func titleFrom(prompt, dir string) string {
+	for _, line := range strings.Split(prompt, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return clip(line, 40)
+		}
+	}
+	return filepath.Base(dir)
 }
 
 func (h *Hub) Remove(a *Agent, dropWorktree bool) {

@@ -182,7 +182,7 @@ press Ctrl where this table says Cmd.
 |---|---|
 | `Cmd+K` | Commands: every action and session |
 | `Cmd+N` | New session |
-| `Cmd+L` | Ask the dispatcher |
+| `Cmd+L` | Write in the open session, or ask the dispatcher |
 | `J` `K` | Move between sessions |
 | `Enter` | Open the selected session, write in the open one, or send the answers to a question |
 | `Cmd+1` to `Cmd+9` | Open a session by position |

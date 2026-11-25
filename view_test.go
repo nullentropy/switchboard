@@ -18,7 +18,7 @@ func openView(open *Agent, d *Agent) *View {
 	return v
 }
 
-func TestCmdLInTheDispatchersConversationKeepsItOpen(t *testing.T) {
+func TestAskTheDispatcherInItsConversationKeepsItOpen(t *testing.T) {
 	d := &Agent{}
 	v := openView(d, d)
 	v.focusCommand()
@@ -30,10 +30,31 @@ func TestCmdLInTheDispatchersConversationKeepsItOpen(t *testing.T) {
 	}
 }
 
-func TestCmdLInAnotherSessionGoesBackToTheBoard(t *testing.T) {
+func TestAskTheDispatcherInAnotherSessionGoesBackToTheBoard(t *testing.T) {
 	v := openView(&Agent{}, &Agent{})
 	v.focusCommand()
 	if v.dialog != nil || v.focus != nil || v.shell.Parent() != nil {
 		t.Fatal("the session and its dialog should both close")
+	}
+}
+
+func TestCmdLInASessionStaysOnIt(t *testing.T) {
+	a := &Agent{}
+	v := openView(a, &Agent{})
+	v.focusInput()
+	if v.dialog != nil {
+		t.Fatal("the dialog on top is still open")
+	}
+	if v.focus == nil || v.focus.a != a || v.shell.Parent() == nil {
+		t.Fatal("the session was closed")
+	}
+}
+
+func TestCmdLOnTheBoardStaysOnTheBoard(t *testing.T) {
+	v := openView(&Agent{}, &Agent{})
+	v.closeFocus()
+	v.focusInput()
+	if v.dialog != nil || v.focus != nil || v.shell.Parent() != nil {
+		t.Fatal("the board should show with no dialog")
 	}
 }

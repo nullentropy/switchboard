@@ -129,7 +129,7 @@ func (v *View) build() *caution.Node {
 	s.SetMenu(caution.Menu{Title: "Sessions", Items: []caution.MenuItem{
 		{Title: "New Session…", Key: modKey + "+n", OnPick: v.openNew},
 		{Title: "Commands…", Key: modKey + "+k", OnPick: v.openPalette},
-		{Title: "Ask the Dispatcher", Key: modKey + "+l", OnPick: v.focusCommand},
+		{Title: "Write a Message", Key: modKey + "+l", OnPick: v.focusInput},
 		{Title: "Next Session That Needs You", Key: modKey + "+j", OnPick: v.nextWaiting},
 		{Title: "All Sessions", Key: modKey + "+0", OnPick: v.closeFocus},
 		{Title: "Keyboard Shortcuts", OnPick: v.openShortcuts},
@@ -272,6 +272,15 @@ const shortcutsLabel = "Shortcuts  ?"
 func (v *View) fitConsole(w, _ float64) {
 	help := 16 + 16 + 10 + 10 + textW(modLabel+"L", 10, true) + 10 + 10 + 8 + 10 + textW(shortcutsLabel, 13, false) + 2*16 + 10 + 16
 	v.dStatus.W(min(statusW, max(0, w-help)))
+}
+
+func (v *View) focusInput() {
+	if v.focus == nil {
+		v.focusCommand()
+		return
+	}
+	v.closeDialog()
+	v.focus.composer.Focus()
 }
 
 func (v *View) focusCommand() {

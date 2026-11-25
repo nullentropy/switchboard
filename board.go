@@ -322,7 +322,7 @@ func (v *View) bindKeys() {
 	s.OnKey(modKey+"+0", v.closeFocus)
 	s.OnKey(modKey+"+n", v.openNew)
 	s.OnKey(modKey+"+k", v.openPalette)
-	s.OnKey(modKey+"+l", v.focusCommand)
+	s.OnKey(modKey+"+l", v.focusInput)
 	s.OnKey(modKey+"+j", v.nextWaiting)
 	s.OnKey(modKey+"+.", func() {
 		if a := v.target(); a != nil {
@@ -458,7 +458,7 @@ func (v *View) confirmResume(list []*Agent) {
 func (v *View) paletteItems() []paletteItem {
 	items := []paletteItem{
 		{"New session", modLabel + "N", icPlus, v.openNew, "Actions"},
-		{"Ask the dispatcher", modLabel + "L", icSparkles, v.focusCommand, "Actions"},
+		{"Ask the dispatcher", "", icSparkles, v.focusCommand, "Actions"},
 		{"Next session that needs you", modLabel + "J", icHand, v.nextWaiting, "Actions"},
 		{"Keyboard shortcuts", "?", icKeys, v.openShortcuts, "Actions"},
 		{"Settings", modLabel + ",", icSettings, v.openSettings, "Actions"},
@@ -682,7 +682,7 @@ func (v *View) openShortcuts() {
 	rows := caution.Grid([]caution.GridCol{{Px: 120}, {Weight: 1, Align: "stretch"}}).ColGap(14).RowGap(10).
 		Anchor(caution.A{Left: px(24), Right: px(24), Top: px(18)})
 	for _, h := range [][2]string{
-		{modLabel + "K", "Commands: every action and session"}, {modLabel + "N", "New session"}, {modLabel + "L", "Ask the dispatcher"},
+		{modLabel + "K", "Commands: every action and session"}, {modLabel + "N", "New session"}, {modLabel + "L", "Write in the open session, or ask the dispatcher"},
 		{"J  K", "Move between sessions"}, {"Enter", "Open the selected session, write in the open one, or send the answers to a question"}, {modLabel + "1 … " + modLabel + "9", "Open a session by position"},
 		{"A  " + modLabel + "Y", "Allow what the selected or first waiting session asks"}, {shiftLabel + "A  " + shiftLabel + modLabel + "Y", "Always allow it for that session"},
 		{"D  " + shiftLabel + modLabel + "D", "Deny it"}, {modLabel + "J", "Jump to the next session that needs you"}, {".", "Interrupt the turn"},
