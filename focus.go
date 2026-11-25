@@ -278,7 +278,7 @@ func queuedNote(st State) string {
 		return "Not delivered yet. It reaches the agent when this turn ends."
 	case NeedsYou:
 		return "Not delivered yet. It reaches the agent when this turn ends, or with your next message."
-	case Failed, Stopped, Interrupted:
+	case Failed, Stopped, Interrupted, Waiting:
 		return "Not delivered yet. It goes with your next message, or press Send now."
 	}
 	return "Not delivered yet. It goes when you finish editing."
@@ -354,6 +354,8 @@ func (f *focusView) update(s Snapshot) {
 		act = "Ready"
 	case s.State == Interrupted:
 		act = "Interrupted when Switchboard quit mid-turn. Sending a message picks it up again."
+	case s.State == Waiting:
+		act = "Waiting for usage limit, resumes " + resumeLabel(s.Meta.ResumeAt, clock()) + ". Sending a message resumes it now."
 	case act == "" && s.State == Stopped:
 		act = "Ended. Sending a message picks the conversation up again."
 	case s.State == NeedsYou:
@@ -362,7 +364,7 @@ func (f *focusView) update(s Snapshot) {
 	f.activity.SetText(act)
 	f.activityFX.set(f.v.set, act, 12, true, thinking(s))
 	f.busy.set(s)
-	f.activity.SetColor(map[bool]string{true: tok, false: "$inkDim"}[s.State == NeedsYou || s.State == Failed || s.State == Interrupted])
+	f.activity.SetColor(map[bool]string{true: tok, false: "$inkDim"}[s.State == NeedsYou || s.State == Failed || s.State == Interrupted || s.State == Waiting])
 
 	if s.Cleared != f.cleared {
 		f.cleared = s.Cleared
@@ -664,6 +666,10 @@ func (f *focusView) showDetail(sh *shown, e Entry) {
 
 func (f *focusView) buildCard(s Snapshot) {
 	f.card.Clear()
+	if s.State == Waiting {
+		f.waitCard(s)
+		return
+	}
 	if s.State != NeedsYou || len(s.Pending) == 0 {
 		f.card.H(0)
 		return
@@ -973,4 +979,17 @@ func wrapLines(s string, size, width float64) []string {
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+func (f *focusView) waitCard(s Snapshot) {
+	a := f.a
+	f.card.H(56).Kids(
+		caution.Panel().W(3).Bg("$stNeed").Anchor(caution.A{Left: px(0), Top: px(0), Bottom: px(0)}),
+		caution.Label(f.name()+" hit its usage limit. Switchboard resumes it at "+resumeLabel(s.Meta.ResumeAt, clock())+".").
+			FontSize(13).Weight(600).Color("$stNeed").Anchor(caution.A{Left: px(24), CenterY: px(0)}),
+		caution.HStack().Gap(8).Align("center").Anchor(caution.A{Right: px(20), CenterY: px(0)}).Kids(
+			caution.Button("Stop waiting").Tip("Leave it Ready; nothing is sent").OnClick(func() { go a.CancelWait() }),
+			caution.Button("Resume now").Primary().Tip("Send the continue message now").OnClick(func() { go a.ResumeNow() }),
+		),
+	)
 }

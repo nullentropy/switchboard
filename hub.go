@@ -333,7 +333,7 @@ func (h *Hub) report(a *Agent, what string) {
 
 func (h *Hub) flushReports() {
 	d := h.Dispatcher
-	if st := d.Snapshot().State; st == Working || st == Starting || st == NeedsYou {
+	if st := d.Snapshot().State; st == Working || st == Starting || st == NeedsYou || st == Waiting {
 		return
 	}
 	h.mu.Lock()

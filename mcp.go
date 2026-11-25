@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 const dispatcherPrompt = `You are the dispatcher inside Switchboard, an app where the user runs many coding-agent sessions at once and watches them on one screen.
@@ -128,7 +129,7 @@ var (
 var toolDefs = []map[string]any{
 	{"name": "system_load", "description": "How loaded the machine is: load average against its cores, free memory and swap, whether it is overloaded, and each session's CPU and memory with its busiest process.",
 		"inputSchema": obj(map[string]any{})},
-	{"name": "list_sessions", "description": "Every session on the wall: id, title, folder, branch, state, current activity, last reply, anything waiting on the user, how many messages are pending (sent mid-turn, not yet delivered), and cost. State is Starting, Working, Needs you, Ready, Failed, Interrupted or Stopped. Interrupted means Switchboard quit in the middle of its turn; a message resumes it. Stopped means the user or you stopped it.",
+	{"name": "list_sessions", "description": "Every session on the wall: id, title, folder, branch, state, current activity, last reply, anything waiting on the user, how many messages are pending (sent mid-turn, not yet delivered), and cost. State is Starting, Working, Needs you, Ready, Failed, Interrupted, Waiting for limit or Stopped. Interrupted means Switchboard quit in the middle of its turn; a message resumes it. Waiting for limit means a usage limit stopped its turn; resumes_at says when Switchboard sends it a continue message, and a message from you resumes it now. Stopped means the user or you stopped it.",
 		"inputSchema": obj(map[string]any{})},
 	{"name": "read_session", "description": "The recent transcript of one session, oldest first.",
 		"inputSchema": obj(map[string]any{"session": idProp, "limit": map[string]any{"type": "integer", "description": "How many entries, default 20."}}, "session")},
@@ -197,6 +198,9 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 			}
 			if len(s.Queued) > 0 {
 				row["pending_messages"] = len(s.Queued)
+			}
+			if s.State == Waiting {
+				row["resumes_at"] = s.Meta.ResumeAt.Format(time.RFC3339)
 			}
 			out = append(out, row)
 		}

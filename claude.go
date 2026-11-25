@@ -216,6 +216,10 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 				errText = sub
 			}
 		}
+		if at, ok := limitResumeAt(errText, clock()); ok {
+			a.waitLimit(errText, at)
+			return true
+		}
 		a.turnEnd(errText)
 		return true
 	case "control_request":

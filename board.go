@@ -28,6 +28,8 @@ func groupOf(s State) string {
 		return "fail"
 	case Interrupted:
 		return "int"
+	case Waiting:
+		return "wait"
 	}
 	return "idle"
 }
@@ -38,7 +40,7 @@ func (v *View) buildBoard() *caution.Node {
 	v.goals = caution.VStack().Gap(8).Align("stretch")
 	v.sections = nil
 	for _, sc := range []struct{ key, title string }{
-		{"need", "Needs you"}, {"work", "Working"}, {"fail", "Failed"}, {"int", "Interrupted"}, {"done", "Done"}, {"idle", "Ended"},
+		{"need", "Needs you"}, {"work", "Working"}, {"wait", "Waiting for limit"}, {"fail", "Failed"}, {"int", "Interrupted"}, {"done", "Done"}, {"idle", "Ended"},
 	} {
 		s := &section{key: sc.key, title: sc.title, inbox: sc.key == "need"}
 		s.count = caution.Label("").FontSize(11).Weight(600).Color("$inkFaint")
@@ -68,7 +70,7 @@ func (v *View) buildBoard() *caution.Node {
 
 func (v *View) display() []*Agent {
 	var out []*Agent
-	for _, g := range []string{"need", "work", "fail", "int", "done", "idle"} {
+	for _, g := range []string{"need", "work", "wait", "fail", "int", "done", "idle"} {
 		for _, a := range v.order {
 			if t := v.tiles[a]; t != nil && groupOf(t.state) == g && (v.goal == "" || t.snap.Meta.Goal == v.goal) &&
 				(v.project == "" || projectOf(t.snap.Meta) == v.project) {

@@ -22,10 +22,11 @@ const (
 	Ready
 	Failed
 	Interrupted
+	Waiting
 )
 
 func (s State) String() string {
-	return [...]string{"Stopped", "Starting", "Working", "Needs you", "Ready", "Failed", "Interrupted"}[s]
+	return [...]string{"Stopped", "Starting", "Working", "Needs you", "Ready", "Failed", "Interrupted", "Waiting for limit"}[s]
 }
 
 // lastState is how a session is shown after a restart, when its process is
@@ -38,6 +39,8 @@ func (a *Agent) lastState() string {
 		return "ready"
 	case Failed:
 		return "failed"
+	case Waiting:
+		return "waiting"
 	case Stopped:
 		if a.stopped {
 			return "stopped"
@@ -52,6 +55,8 @@ func restoredState(last string) State {
 		return Interrupted
 	case "failed":
 		return Failed
+	case "waiting":
+		return Waiting
 	case "stopped":
 		return Stopped
 	}
@@ -126,6 +131,7 @@ type Meta struct {
 	Created     time.Time `json:"created"`
 	Launched    bool      `json:"launched"`
 	Last        string    `json:"last,omitempty"`
+	ResumeAt    time.Time `json:"resumeAt,omitzero"`
 }
 
 type driver interface {
@@ -464,6 +470,7 @@ func (a *Agent) SendFrom(text, from string) {
 	a.Activity = "Starting"
 	a.TurnFrom = time.Now()
 	a.Err = ""
+	a.Meta.ResumeAt = time.Time{}
 	a.mu.Unlock()
 	if old != nil {
 		old.stop()
@@ -558,6 +565,7 @@ func (a *Agent) Stop() {
 	a.mu.Lock()
 	p := a.p
 	a.stopped = true
+	a.Meta.ResumeAt = time.Time{}
 	idle := p == nil && a.State != Stopped
 	if idle {
 		a.State = Stopped

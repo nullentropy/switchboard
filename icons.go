@@ -67,6 +67,8 @@ func stateIcon(s State) string {
 		return icFail
 	case Interrupted:
 		return icRetry
+	case Waiting:
+		return icPause
 	}
 	return icPause
 }

@@ -40,6 +40,7 @@ func main() {
 		hub.runDemo(*demoN)
 	} else {
 		go hub.watchLoad()
+		go hub.watchLimits()
 	}
 	mcpURL, err := hub.startMCP()
 	if err != nil {

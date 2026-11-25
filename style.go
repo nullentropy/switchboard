@@ -91,7 +91,7 @@ func stateToken(s State) string {
 		return "stReady"
 	case Failed:
 		return "stFail"
-	case Interrupted:
+	case Interrupted, Waiting:
 		return "stNeed"
 	}
 	return "stIdle"

@@ -311,6 +311,8 @@ func statusText(s Snapshot) (string, string) {
 			return strings.TrimSuffix(first, ".") + ".", "$stFail"
 		}
 		return oneLine(s.Err), "$stFail"
+	case Waiting:
+		return "Waiting for usage limit, resumes " + resumeLabel(s.Meta.ResumeAt, clock()), "$stNeed"
 	case Working, Starting:
 		if s.Activity == "" {
 			return "Starting", "$inkDim"
@@ -395,6 +397,11 @@ func (t *tile) buildAction(s Snapshot) {
 		t.action.Add(caution.Button("Reply").Tip("Open and write the next message (Enter)").OnClick(func() { t.v.openFocus(a) }))
 	case Failed:
 		t.action.Add(iconButton(icRetry, "Send the last message again", func() { go retry(a) }))
+	case Waiting:
+		t.action.Add(caution.HStack().Gap(6).Align("center").Kids(
+			iconButton(icSquare, "Stop waiting for the limit", func() { go a.CancelWait() }),
+			caution.Button("Resume now").Tip("Send the continue message now").OnClick(func() { go a.ResumeNow() }),
+		))
 	}
 }
 
