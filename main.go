@@ -108,6 +108,7 @@ func startUpdates(hub *Hub, flushWindow *func()) {
 			log.Printf("update: relaunch: %v", err)
 		}
 	}
+	hub.updater = &u
 	hub.restart = func() error {
 		ok, err := u.installStaged(root)
 		if err != nil {

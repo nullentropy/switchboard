@@ -396,7 +396,7 @@ func (h *Hub) watchUpdates(u updater) {
 	for {
 		if !h.Settings().UpdatesOff {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-			tag, err := u.checkAndStage(ctx)
+			tag, err := h.stageUpdate(ctx)
 			cancel()
 			switch {
 			case err != nil:
@@ -411,6 +411,44 @@ func (h *Hub) watchUpdates(u updater) {
 		}
 		time.Sleep(time.Hour)
 	}
+}
+
+func (h *Hub) stageUpdate(ctx context.Context) (string, error) {
+	h.stageMu.Lock()
+	defer h.stageMu.Unlock()
+	return h.updater.checkAndStage(ctx)
+}
+
+var errNoSelfUpdate = errors.New("this build of Switchboard does not update itself")
+
+func (h *Hub) CheckForUpdates(ctx context.Context) (tag string, ready bool, err error) {
+	if h.updater == nil {
+		return "", false, errNoSelfUpdate
+	}
+	if h.Settings().UpdatesOff {
+		latest, err := h.updater.latestTag(ctx)
+		if err != nil || !newerTag(h.updater.version, latest) {
+			return "", false, err
+		}
+		return latest, false, nil
+	}
+	tag, err = h.stageUpdate(ctx)
+	if err != nil || tag == "" {
+		return "", false, err
+	}
+	h.setUpdateReady(tag)
+	return tag, true, nil
+}
+
+func (h *Hub) DownloadUpdate(ctx context.Context) (string, error) {
+	if h.updater == nil {
+		return "", errNoSelfUpdate
+	}
+	tag, err := h.stageUpdate(ctx)
+	if err == nil && tag == "" {
+		err = errors.New("no newer release was found")
+	}
+	return tag, err
 }
 
 func (h *Hub) setUpdateReady(tag string) {

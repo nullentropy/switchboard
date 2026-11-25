@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -117,6 +119,29 @@ func (v *View) stat(key, label string) *caution.Node {
 	)
 }
 
+func (v *View) menus() []caution.Menu {
+	return []caution.Menu{
+		{Title: "Switchboard", App: true, Items: []caution.MenuItem{
+			{Title: "Check for Updates…", OnPick: v.checkForUpdates},
+			{Title: "Settings…", Key: modKey + "+,", OnPick: v.openSettings},
+		}},
+		{Title: "File", Items: []caution.MenuItem{
+			{Title: "New Session…", Key: modKey + "+n", OnPick: v.openNew},
+		}},
+		{Title: "Session", Items: []caution.MenuItem{
+			{Title: "Write a Message", Key: modKey + "+l", OnPick: v.focusInput},
+			{Title: "Next Session That Needs You", Key: modKey + "+j", OnPick: v.nextWaiting},
+		}},
+		{Title: "View", Items: []caution.MenuItem{
+			{Title: "Commands…", Key: modKey + "+k", OnPick: v.openPalette},
+			{Title: "All Sessions", Key: modKey + "+0", OnPick: v.closeFocus},
+		}},
+		{Title: "Help", Items: []caution.MenuItem{
+			{Title: "Keyboard Shortcuts", OnPick: v.openShortcuts},
+		}},
+	}
+}
+
 func (v *View) build() *caution.Node {
 	s := v.s
 	s.SetTitle("Switchboard")
@@ -128,16 +153,9 @@ func (v *View) build() *caution.Node {
 	s.AddFont("Lucide", iconURI)
 	s.SetFonts("Inter", "JetBrains Mono")
 
-	s.SetMenu(caution.Menu{Title: "Sessions", Items: []caution.MenuItem{
-		{Title: "New Session…", Key: modKey + "+n", OnPick: v.openNew},
-		{Title: "Commands…", Key: modKey + "+k", OnPick: v.openPalette},
-		{Title: "Write a Message", Key: modKey + "+l", OnPick: v.focusInput},
-		{Title: "Next Session That Needs You", Key: modKey + "+j", OnPick: v.nextWaiting},
-		{Title: "All Sessions", Key: modKey + "+0", OnPick: v.closeFocus},
-		{Title: "Keyboard Shortcuts", OnPick: v.openShortcuts},
-		{Sep: true},
-		{Title: "Settings…", Key: modKey + "+,", OnPick: v.openSettings},
-	}})
+	if runtime.GOOS != "linux" {
+		s.SetMenu(v.menus()...)
+	}
 	v.bindKeys()
 
 	v.stats = map[string]*caution.Node{}
@@ -787,8 +805,87 @@ func (v *View) drawUpdate() {
 	}
 }
 
-func (v *View) restartToUpdate() {
-	tag := v.hub.UpdateReady()
+func (v *View) checkForUpdates() {
+	v.updateDialog("Checking for updates…", "")
+	wait := v.dialog
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		tag, ready, err := v.hub.CheckForUpdates(ctx)
+		cancel()
+		v.s.Update(func() {
+			if v.dialog != wait {
+				return
+			}
+			have := "You have version " + strings.TrimPrefix(version, "v") + "."
+			next := strings.TrimPrefix(tag, "v")
+			switch {
+			case err != nil:
+				v.updateDialog("Could not check for updates", sentence(err))
+			case tag == "":
+				v.updateDialog("Switchboard is up to date", have)
+			case ready:
+				v.updateDialog("Switchboard "+next+" is ready", have+" Restart Switchboard to update.",
+					caution.Button("Later").OnClick(v.closeDialog),
+					caution.Button("Restart").Primary().OnClick(func() { v.confirmRestart(tag) }))
+			default:
+				v.updateDialog("Switchboard "+next+" is available", have+" Automatic updates are off.",
+					caution.Button("Later").OnClick(v.closeDialog),
+					caution.Button("Update").Primary().OnClick(v.downloadUpdate))
+			}
+		})
+	}()
+}
+
+func (v *View) downloadUpdate() {
+	v.updateDialog("Downloading the update…", "")
+	wait := v.dialog
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		tag, err := v.hub.DownloadUpdate(ctx)
+		cancel()
+		v.s.Update(func() {
+			if v.dialog != wait {
+				return
+			}
+			if err != nil {
+				v.updateDialog("Could not download the update", sentence(err))
+				return
+			}
+			v.confirmRestart(tag)
+		})
+	}()
+}
+
+func sentence(err error) string {
+	s := err.Error()
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:] + "."
+}
+
+func (v *View) updateDialog(title, body string, buttons ...*caution.Node) {
+	if len(buttons) == 0 && body != "" {
+		buttons = []*caution.Node{caution.Button("OK").Primary().OnClick(v.closeDialog)}
+	}
+	h := 110.0
+	if body != "" {
+		h = 170
+	}
+	d := caution.Dialog(title).CardSize(460, h)
+	if body != "" {
+		d.Add(caution.Label(body).FontSize(13).Color("$inkDim").Wrap().
+			Anchor(caution.A{Left: px(20), Right: px(20), Top: px(16)}))
+	}
+	if len(buttons) > 0 {
+		d.Add(caution.HStack().Gap(8).Anchor(caution.A{Right: px(20), Bottom: px(20)}).Kids(buttons...))
+	}
+	v.showDialog(d)
+}
+
+func (v *View) restartToUpdate() { v.confirmRestart(v.hub.UpdateReady()) }
+
+func (v *View) confirmRestart(tag string) {
 	if tag == "" {
 		return
 	}

@@ -293,3 +293,58 @@ func TestMacOSStagesTheAppBundleAndSwapsItWhole(t *testing.T) {
 		t.Fatal("a file from the old bundle survived the swap")
 	}
 }
+
+func TestCheckingForUpdatesWithAutomaticUpdatesOnDownloadsTheRelease(t *testing.T) {
+	rel := linuxRelease(t, "v0.2.0", "new")
+	u := testUpdater(t, rel.serve(t), "0.1.0", "linux")
+	h := &Hub{updater: &u}
+	tag, ready, err := h.CheckForUpdates(context.Background())
+	if err != nil || tag != "v0.2.0" || !ready {
+		t.Fatalf("got %q, ready %v, %v; want v0.2.0 ready", tag, ready, err)
+	}
+	if got := h.UpdateReady(); got != "v0.2.0" {
+		t.Fatalf("UpdateReady = %q; want v0.2.0", got)
+	}
+}
+
+func TestCheckingForUpdatesWithAutomaticUpdatesOffOnlyReportsTheRelease(t *testing.T) {
+	rel := linuxRelease(t, "v0.2.0", "new")
+	u := testUpdater(t, rel.serve(t), "0.1.0", "linux")
+	h := &Hub{updater: &u, settings: Settings{UpdatesOff: true}}
+	tag, ready, err := h.CheckForUpdates(context.Background())
+	if err != nil || tag != "v0.2.0" || ready {
+		t.Fatalf("got %q, ready %v, %v; want v0.2.0 not ready", tag, ready, err)
+	}
+	if n := rel.hits.Load(); n != 1 {
+		t.Fatalf("made %d requests; want only the release lookup", n)
+	}
+	tag, err = h.DownloadUpdate(context.Background())
+	if err != nil || tag != "v0.2.0" {
+		t.Fatalf("download got %q, %v; want v0.2.0", tag, err)
+	}
+	if u.readyTag() != "v0.2.0" {
+		t.Fatal("the downloaded release is not staged")
+	}
+}
+
+func TestCheckingForUpdatesOnTheLatestReleaseIsUpToDate(t *testing.T) {
+	rel := linuxRelease(t, "v0.2.0", "new")
+	for _, off := range []bool{false, true} {
+		u := testUpdater(t, rel.serve(t), "0.2.0", "linux")
+		h := &Hub{updater: &u, settings: Settings{UpdatesOff: off}}
+		tag, ready, err := h.CheckForUpdates(context.Background())
+		if err != nil || tag != "" || ready {
+			t.Errorf("updates off %v: got %q, ready %v, %v; want up to date", off, tag, ready, err)
+		}
+	}
+}
+
+func TestABuildThatCannotUpdateSaysSo(t *testing.T) {
+	h := &Hub{}
+	if _, _, err := h.CheckForUpdates(context.Background()); err != errNoSelfUpdate {
+		t.Fatalf("check got %v; want %v", err, errNoSelfUpdate)
+	}
+	if _, err := h.DownloadUpdate(context.Background()); err != errNoSelfUpdate {
+		t.Fatalf("download got %v; want %v", err, errNoSelfUpdate)
+	}
+}

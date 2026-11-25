@@ -59,6 +59,8 @@ type Hub struct {
 	interrupted  []*Agent
 	updateTag    string
 	restart      func() error
+	updater      *updater
+	stageMu      sync.Mutex
 }
 
 func newHub(bins map[string]string, path string) *Hub {

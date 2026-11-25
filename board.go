@@ -586,9 +586,12 @@ func (v *View) paletteItems() []paletteItem {
 	items := []paletteItem{
 		{"New session", modLabel + "N", icPlus, v.openNew, "Actions"},
 		{"Ask the dispatcher", "", icSparkles, v.focusCommand, "Actions"},
+		{"Write a message", modLabel + "L", icSend, v.focusInput, "Actions"},
 		{"Next session that needs you", modLabel + "J", icHand, v.nextWaiting, "Actions"},
+		{"All sessions", modLabel + "0", icLayers, v.closeFocus, "Actions"},
 		{"Keyboard shortcuts", "?", icKeys, v.openShortcuts, "Actions"},
 		{"Settings", modLabel + ",", icSettings, v.openSettings, "Actions"},
+		{"Check for updates", "", icRetry, v.checkForUpdates, "Actions"},
 	}
 	if tag := v.hub.UpdateReady(); tag != "" {
 		items = append(items, paletteItem{"Restart to update to " + strings.TrimPrefix(tag, "v"), "", icSettings, v.restartToUpdate, "Actions"})
