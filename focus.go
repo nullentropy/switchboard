@@ -486,7 +486,7 @@ func (f *focusView) addEntry(e Entry) shown {
 	case EntryUser:
 		gutter.SetText("You").SetColor("$accent")
 		body.Add(caution.RichText(caution.Span{Text: e.Text}).FontSize(14).Selectable())
-		row := caution.HStack().Gap(12).Kids(gutter, body)
+		row := f.copyMenus(caution.HStack().Gap(12).Kids(gutter, body), e.Text, []caution.Span{{Text: e.Text}})
 		f.list.Add(row)
 		f.asks = append(f.asks, userRow{row: row, text: e.Text})
 		return shown{rev: e.Rev, gutter: gutter, body: body}
@@ -495,10 +495,15 @@ func (f *focusView) addEntry(e Entry) shown {
 		body.Add(caution.Label(e.Text).FontSize(12).Italic().Color("$inkFaint"))
 	case EntryAssistant:
 		gutter.SetText(f.name()).SetColor("$ink")
-		body.Add(caution.RichText(markdownSpans(e.Text)...).FontSize(14).Selectable())
+		spans := markdownSpans(e.Text)
+		body.Add(caution.RichText(spans...).FontSize(14).Selectable())
+		f.list.Add(f.copyMenus(caution.HStack().Gap(12).Kids(gutter, body), e.Text, spans))
+		return shown{rev: e.Rev, gutter: gutter, body: body}
 	case EntryError:
 		gutter.SetText("Error").SetColor("$stFail")
 		body.Add(caution.RichText(caution.Span{Text: e.Text, Mono: true}).FontSize(13).Color("$stFail").Selectable())
+		f.list.Add(f.copyMenus(caution.HStack().Gap(12).Kids(gutter, body), e.Text, []caution.Span{{Text: e.Text, Mono: true}}))
+		return shown{rev: e.Rev, gutter: gutter, body: body}
 	}
 	f.list.Add(caution.HStack().Gap(12).Kids(gutter, body))
 	return shown{rev: e.Rev, gutter: gutter, body: body}
