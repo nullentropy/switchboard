@@ -128,6 +128,9 @@ func (v *View) newRow(a *Agent) *railRow {
 			Kids(r.icon.box, r.title, r.agent),
 		r.line.Anchor(caution.A{Left: px(34), Right: px(12), Top: px(30)}),
 	)
+	if a != v.hub.Dispatcher {
+		r.node.Context(v.sessionMenu(a)...)
+	}
 	return r
 }
 

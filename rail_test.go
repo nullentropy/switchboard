@@ -142,3 +142,35 @@ func TestRemovingTheOpenSessionFromItsConversationOpensItsNeighbour(t *testing.T
 		t.Fatal("the removed session is still on the board")
 	}
 }
+
+func contextTitles(n *caution.Node) []string {
+	specs, _ := n.Prop("context").([]any)
+	var out []string
+	for _, s := range specs {
+		m := s.(map[string]any)
+		if m["sep"] == true {
+			out = append(out, "-")
+			continue
+		}
+		out = append(out, m["title"].(string))
+	}
+	return out
+}
+
+func TestASessionRowInTheSessionListHasTheBoardTileMenu(t *testing.T) {
+	d := &Agent{Meta: Meta{Title: "Dispatcher"}}
+	arthur := &Agent{Meta: Meta{Title: "Arthur Dent"}}
+	v := railView(d, arthur)
+	v.layoutRail()
+
+	want := contextTitles(v.tiles[arthur].node)
+	if len(want) == 0 {
+		t.Fatal("the board tile has no menu")
+	}
+	if got := contextTitles(v.rows[arthur].node); !slices.Equal(got, want) {
+		t.Fatalf("session row menu %v, want %v", got, want)
+	}
+	if got := contextTitles(v.rows[d].node); got != nil {
+		t.Fatalf("the Dispatcher row has a menu: %v", got)
+	}
+}

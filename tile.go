@@ -65,6 +65,18 @@ func iconButton(glyph, tip string, fn func()) *caution.Node {
 
 const tileRadius = 12.0
 
+func (v *View) sessionMenu(a *Agent) []caution.ContextItem {
+	return []caution.ContextItem{
+		{Title: "Open", OnPick: func() { v.select_(a); v.openFocus(a) }},
+		{Title: "Rename…", OnPick: func() { v.openRename(a) }},
+		{Sep: true},
+		{Title: "Interrupt", OnPick: a.Interrupt},
+		{Title: "End session…", OnPick: func() { v.confirmEnd(a) }},
+		{Sep: true},
+		{Title: "Remove…", OnPick: func() { v.confirmRemove(a) }},
+	}
+}
+
 func newTile(v *View, a *Agent) *tile {
 	t := &tile{v: v, a: a, state: -1}
 	open := func() { v.select_(a); v.openFocus(a) }
@@ -88,15 +100,7 @@ func newTile(v *View, a *Agent) *tile {
 		t.trailRow,
 		caution.HStack().Gap(10).Align("center").H(28).Kids(t.where, t.meta, t.action),
 	)
-	ctx := []caution.ContextItem{
-		{Title: "Open", OnPick: open},
-		{Title: "Rename…", OnPick: func() { v.openRename(a) }},
-		{Sep: true},
-		{Title: "Interrupt", OnPick: a.Interrupt},
-		{Title: "End session…", OnPick: func() { v.confirmEnd(a) }},
-		{Sep: true},
-		{Title: "Remove…", OnPick: func() { v.confirmRemove(a) }},
-	}
+	ctx := v.sessionMenu(a)
 	t.edge = caution.Panel().W(3)
 	t.node = caution.Panel().H(tileH).Bg("$panel").Radius(tileRadius).Border("$edgeSoft", 1).Clips().
 		Kids(caution.Glass().HoverFill("$hover").Anchor(fill()).OnPick(func(_, _ float64, _ *caution.Node) { open() }), t.edge, content).
