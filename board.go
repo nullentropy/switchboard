@@ -83,6 +83,9 @@ func (v *View) display() []*Agent {
 }
 
 func (v *View) layoutBoard() {
+	if v.goal != "" && !v.showDone && v.hub.GoalDone(v.goal) {
+		v.goal = ""
+	}
 	disp := v.display()
 	v.shown = disp
 	v.boardStack.Clear()

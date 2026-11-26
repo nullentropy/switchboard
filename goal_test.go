@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	caution "github.com/nullentropy/caution"
 )
 
 func TestRemovingAGoalTakesItsSessionsOffAndForgetsItsDoneState(t *testing.T) {
@@ -115,5 +118,78 @@ func TestTheDispatcherRemovesAGoalOrRefusesAllOfIt(t *testing.T) {
 	}
 	if len(h.reports) != 0 {
 		t.Fatalf("the dispatcher was told about its own removal: %q", h.reports)
+	}
+}
+
+func TestADoneGoalLeavesTheBoardEvenWhileTheBoardShowsOnlyThatGoal(t *testing.T) {
+	h := newHub(map[string]string{}, filepath.Join(t.TempDir(), "state.json"))
+	m := &mcpServer{hub: h}
+	arthur := wallSession(t, h, Meta{Title: "Arthur", Cwd: t.TempDir(), Goal: "Find the Question"})
+	zaphod := wallSession(t, h, Meta{Title: "Zaphod", Cwd: t.TempDir(), Goal: "Steal the Heart of Gold"})
+	v := &View{hub: h, tiles: map[*Agent]*tile{}, body: caution.Panel()}
+	v.buildBoard()
+	v.addTile(arthur)
+	v.addTile(zaphod)
+
+	v.filterGoal("Find the Question")
+	if _, err := m.call("set_goal_done", map[string]any{"goal": "Find the Question", "done": true}); err != nil {
+		t.Fatal(err)
+	}
+	v.layoutBoard()
+	if v.goal != "" || len(v.shown) != 1 || v.shown[0] != zaphod {
+		t.Fatalf("after the dispatcher marked the shown goal done: filter %q, %d on the board", v.goal, len(v.shown))
+	}
+
+	v.showDone = true
+	v.filterGoal("Find the Question")
+	if len(v.shown) != 1 || v.shown[0] != arthur {
+		t.Fatal("clicking the done goal did not show its sessions")
+	}
+	v.showDone = false
+	v.layoutBoard()
+	if v.goal != "" || len(v.shown) != 1 || v.shown[0] != zaphod {
+		t.Fatalf("after hiding the done goals: filter %q, %d on the board", v.goal, len(v.shown))
+	}
+}
+
+func TestTheBoardRebuildsOnlyWhenAGoalSessionChangesWhatItShows(t *testing.T) {
+	h := newHub(map[string]string{}, "")
+	trillian := wallSession(t, h, Meta{Title: "Trillian", Cwd: t.TempDir(), Goal: "Find the Question"})
+	trillian.State = NeedsYou
+	trillian.Pending = []*Pending{{ReqID: "babel", Tool: "Bash"}}
+	v := &View{hub: h, tiles: map[*Agent]*tile{}, body: caution.Panel()}
+	v.buildBoard()
+	v.addTile(trillian)
+	v.layoutBoard()
+
+	rebuilds := 0
+	badge := v.tiles[trillian].badge.Children()[0]
+	seen := func() {
+		if b := v.tiles[trillian].badge.Children()[0]; b != badge {
+			badge = b
+			rebuilds++
+		}
+	}
+	for i := range 50 {
+		trillian.mu.Lock()
+		trillian.Activity = fmt.Sprintf("search agent step %d", i)
+		trillian.mu.Unlock()
+		v.updateTile(trillian, trillian.Snapshot())
+		seen()
+	}
+	if rebuilds != 0 {
+		t.Fatalf("the board rebuilt %d times for 50 activity updates", rebuilds)
+	}
+
+	trillian.mu.Lock()
+	trillian.State, trillian.Pending = Working, nil
+	trillian.mu.Unlock()
+	v.updateTile(trillian, trillian.Snapshot())
+	seen()
+	h.Rename(trillian, "Trillian McMillan")
+	v.updateTile(trillian, trillian.Snapshot())
+	seen()
+	if rebuilds != 2 {
+		t.Fatalf("the board rebuilt %d times for a state change and a rename", rebuilds)
 	}
 }

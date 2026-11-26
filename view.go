@@ -450,16 +450,7 @@ func (v *View) agentChanged(a *Agent) {
 		if a == v.hub.Dispatcher {
 			v.updateDispatcher(snap)
 		}
-		if t := v.tiles[a]; t != nil {
-			was, card, goal := groupOf(t.state), t.card, t.snap.Meta.Goal
-			t.update(snap)
-			if groupOf(t.state) != was || t.card != card || (goal != "" && t.state != Working) {
-				v.layoutBoard()
-				if v.sel == a {
-					t.setSelected(true)
-				}
-			}
-		}
+		v.updateTile(a, snap)
 		if v.focus != nil {
 			v.updateRow(a, snap)
 			if v.focus.a == a {
@@ -468,6 +459,23 @@ func (v *View) agentChanged(a *Agent) {
 		}
 		v.refreshSummary()
 	})
+}
+
+func (v *View) updateTile(a *Agent, snap Snapshot) {
+	t := v.tiles[a]
+	if t == nil {
+		return
+	}
+	was, card := groupOf(t.state), t.card
+	state, title, goal := t.state, t.snap.Meta.Title, t.snap.Meta.Goal
+	t.update(snap)
+	if groupOf(t.state) != was || t.card != card ||
+		(goal != "" || snap.Meta.Goal != "") && (t.state != state || snap.Meta.Title != title || snap.Meta.Goal != goal) {
+		v.layoutBoard()
+		if v.sel == a {
+			t.setSelected(true)
+		}
+	}
 }
 
 func (v *View) cue(_ *Agent, k cueKind) {
