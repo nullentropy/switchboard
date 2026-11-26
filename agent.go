@@ -71,6 +71,7 @@ const (
 	EntryTool
 	EntryError
 	EntryNote
+	EntryWidget
 )
 
 type Entry struct {
@@ -82,6 +83,8 @@ type Entry struct {
 	Rev    int
 	Start  time.Time
 	End    time.Time
+	Widget *Widget
+	Answer *WidgetAnswer
 }
 
 type Option struct {
@@ -180,6 +183,8 @@ type Agent struct {
 	note               string
 	cleared            int
 	resetting          bool
+	widgets            map[string]int
+	widgetUses         map[string]map[string]any
 }
 
 type Mark struct {
@@ -290,6 +295,7 @@ func (a *Agent) queued() []Queued {
 func (a *Agent) clearConversation() {
 	a.Entries = nil
 	a.toolIdx = map[string]int{}
+	a.widgets = nil
 	a.cleared++
 	a.resetting = true
 }
@@ -344,6 +350,11 @@ func (a *Agent) Queue(text, from string) bool {
 
 func (a *Agent) ClearQueued(id int) {
 	a.mu.Lock()
+	for _, q := range a.queue {
+		if q.ID == id && q.From == "widget" {
+			a.unanswerWidgets(q.Text)
+		}
+	}
 	a.dropQueued(id)
 	a.mu.Unlock()
 	a.changed()
@@ -367,7 +378,7 @@ func (a *Agent) BeginEdit(id int) (string, bool) {
 	defer a.changed()
 	defer a.mu.Unlock()
 	for _, q := range a.queue {
-		if q.ID == id {
+		if q.ID == id && q.From != "widget" {
 			a.editing = id
 			return q.Text, true
 		}
@@ -433,13 +444,17 @@ func (a *Agent) SendFrom(text, from string) {
 		}
 		return
 	}
-	var texts []string
+	var texts, said []string
 	for _, q := range a.queue {
 		texts = append(texts, q.Text)
+		if q.From != "widget" {
+			said = append(said, q.Text)
+		}
 	}
 	a.queue = nil
 	if text != "" {
 		texts = append(texts, text)
+		said = append(said, text)
 	}
 	if len(texts) == 0 {
 		a.mu.Unlock()
@@ -464,7 +479,7 @@ func (a *Agent) SendFrom(text, from string) {
 	}
 	declined := a.Pending
 	a.Pending = nil
-	for _, t := range texts {
+	for _, t := range said {
 		a.addEntry(Entry{Kind: EntryUser, Text: t})
 	}
 	a.Activity = "Starting"
@@ -478,10 +493,10 @@ func (a *Agent) SendFrom(text, from string) {
 		old.stop()
 	}
 	a.changed()
-	if a != a.hub.Dispatcher {
+	if a != a.hub.Dispatcher && len(said) > 0 {
 		cp := a.takeCheckpoint()
 		a.mu.Lock()
-		for range texts {
+		for range said {
 			a.Meta.Checkpoints = append(a.Meta.Checkpoints, cp)
 		}
 		a.mu.Unlock()

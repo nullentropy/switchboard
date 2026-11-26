@@ -27,6 +27,8 @@ func (claudeDriver) launch(a *Agent) (*proc, error) {
 	}
 	if a.extraArgs != nil {
 		args = append(args, a.extraArgs()...)
+	} else {
+		args = append(args, a.hub.sessionMCPArgs(a)...)
 	}
 	if m.Launched {
 		args = append(args, "--resume", m.ID)
@@ -163,6 +165,10 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 				name, _ := blk["name"].(string)
 				id, _ := blk["id"].(string)
 				input, _ := blk["input"].(map[string]any)
+				if name == widgetToolFull {
+					a.widgetUse(id, input)
+					continue
+				}
 				sum := claudeSummary(name, input)
 				a.toolStart(id, name, sum, claudeStation(name, input))
 				if (name == "Task" || name == "Agent") && !a.replaying {
@@ -198,6 +204,10 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 				}
 			}
 			isErr, _ := blk["is_error"].(bool)
+			if a.widgetResult(id, text, isErr) {
+				changed = true
+				continue
+			}
 			if a.toolEnd(id, text, isErr) {
 				changed = true
 			}
@@ -344,7 +354,7 @@ func (claudeDriver) history(a *Agent) {
 			}
 			msg, _ := m["message"].(map[string]any)
 			if t, ok := msg["content"].(string); ok {
-				if !strings.HasPrefix(t, "<") {
+				if t = a.replayWidgetReplies(t); t != "" && !strings.HasPrefix(t, "<") {
 					a.addEntry(Entry{Kind: EntryUser, Text: t})
 				}
 				continue

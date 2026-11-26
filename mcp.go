@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,12 +27,25 @@ When the user asks for a new busy animation, use get_sprite to see the grid, the
 The user's machine has limited CPU and memory, and sessions that compile or run tests can make it unresponsive. Before starting more than one session, check system_load and start only as many as it has room for: when it is busy, start one, and start the rest as earlier ones finish. Switchboard also tells you, in a [switchboard] message, when the machine becomes overloaded and when it recovers. When it is overloaded, start nothing new. If it stays overloaded, interrupt the busiest session that is building or testing and send it a message to wait. When it recovers, tell the sessions you held back to continue, and start the ones you deferred. Tell the user in one sentence when you hold work back for load.
 When you start several sessions in one repository, each one after the first gets its own git worktree and branch unless you set worktree.
 When the user asks to clear finished sessions off the wall, stop each one with stop_session and then remove it with remove_session. remove_session refuses a session whose worktree still has uncommitted changes or unmerged commits; tell the user which ones and what is left.
+When a table, progress view, chart, keyvalue list, a choice between buttons or a short form would show the user something better than text, use show_widget. It renders in your conversation, and the strip tells the user it is there.
 When the user asks whether Switchboard is up to date or to update it, use check_for_updates; it downloads a newer release but never restarts Switchboard, so tell the user the update is ready and that they restart Switchboard themselves.
 Your replies show in a small strip, so keep them to one to three short sentences.`
 
 type mcpServer struct {
-	hub *Hub
-	url string
+	hub  *Hub
+	url  string
+	base string
+	disp string
+
+	mu      sync.Mutex
+	tokens  map[string]*Agent
+	byAgent map[*Agent]string
+}
+
+func newToken() string {
+	var tok [16]byte
+	_, _ = rand.Read(tok[:])
+	return hex.EncodeToString(tok[:])
 }
 
 func (h *Hub) startMCP() (string, error) {
@@ -39,14 +53,63 @@ func (h *Hub) startMCP() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var tok [16]byte
-	_, _ = rand.Read(tok[:])
-	path := "/mcp/" + hex.EncodeToString(tok[:])
-	m := &mcpServer{hub: h, url: "http://" + l.Addr().String() + path}
+	m := &mcpServer{hub: h, base: "http://" + l.Addr().String() + "/mcp/", disp: newToken(),
+		tokens: map[string]*Agent{}, byAgent: map[*Agent]string{}}
+	m.url = m.base + m.disp
 	mux := http.NewServeMux()
-	mux.HandleFunc(path, m.serve)
+	mux.HandleFunc("/mcp/", m.serve)
 	go func() { _ = http.Serve(l, mux) }()
+	h.mu.Lock()
+	h.mcp = m
+	h.mu.Unlock()
 	return m.url, nil
+}
+
+func (m *mcpServer) sessionURL(a *Agent) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	tok, ok := m.byAgent[a]
+	if !ok {
+		tok = newToken()
+		m.byAgent[a] = tok
+		m.tokens[tok] = a
+	}
+	return m.base + tok
+}
+
+func (m *mcpServer) forget(a *Agent) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if tok, ok := m.byAgent[a]; ok {
+		delete(m.tokens, tok)
+		delete(m.byAgent, a)
+	}
+}
+
+func (m *mcpServer) scope(path string) (*Agent, bool) {
+	tok, ok := strings.CutPrefix(path, "/mcp/")
+	if !ok || tok == "" {
+		return nil, false
+	}
+	if tok == m.disp {
+		return nil, true
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a, ok := m.tokens[tok]
+	return a, ok
+}
+
+func (h *Hub) sessionMCPArgs(a *Agent) []string {
+	h.mu.Lock()
+	m := h.mcp
+	h.mu.Unlock()
+	if m == nil {
+		return nil
+	}
+	cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{
+		"switchboard": map[string]any{"type": "http", "url": m.sessionURL(a)}}})
+	return []string{"--mcp-config", string(cfg), "--allowedTools", widgetToolFull}
 }
 
 type rpcReq struct {
@@ -57,12 +120,17 @@ type rpcReq struct {
 }
 
 func (m *mcpServer) serve(w http.ResponseWriter, r *http.Request) {
+	session, ok := m.scope(r.URL.Path)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 	var req rpcReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -70,7 +138,7 @@ func (m *mcpServer) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
-	result, rpcErr := m.dispatch(req)
+	result, rpcErr := m.dispatch(session, req)
 	resp := map[string]any{"jsonrpc": "2.0", "id": req.ID}
 	if rpcErr != nil {
 		resp["error"] = map[string]any{"code": -32601, "message": rpcErr.Error()}
@@ -81,7 +149,7 @@ func (m *mcpServer) serve(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func (m *mcpServer) dispatch(req rpcReq) (any, error) {
+func (m *mcpServer) dispatch(session *Agent, req rpcReq) (any, error) {
 	switch req.Method {
 	case "initialize":
 		var p struct {
@@ -99,7 +167,10 @@ func (m *mcpServer) dispatch(req rpcReq) (any, error) {
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
-		return map[string]any{"tools": append(append(append([]map[string]any(nil), toolDefs...), themeToolDefs...), spriteToolDefs...)}, nil
+		if session != nil {
+			return map[string]any{"tools": []map[string]any{widgetToolDef}}, nil
+		}
+		return map[string]any{"tools": append(append(append(append([]map[string]any(nil), toolDefs...), themeToolDefs...), spriteToolDefs...), widgetToolDef)}, nil
 	case "tools/call":
 		var p struct {
 			Name      string         `json:"name"`
@@ -108,7 +179,16 @@ func (m *mcpServer) dispatch(req rpcReq) (any, error) {
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return nil, err
 		}
-		text, err := m.call(p.Name, p.Arguments)
+		var text string
+		var err error
+		switch {
+		case session == nil:
+			text, err = m.call(p.Name, p.Arguments)
+		case p.Name == widgetTool:
+			text, err = session.ShowWidget(p.Arguments)
+		default:
+			err = fmt.Errorf("unknown tool %s", p.Name)
+		}
 		if err != nil {
 			return map[string]any{"content": []any{map[string]any{"type": "text", "text": err.Error()}}, "isError": true}, nil
 		}
@@ -250,6 +330,8 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 				fmt.Fprintf(&b, "  [%s %s]\n", e.Tool, e.Text)
 			case EntryError:
 				fmt.Fprintf(&b, "\nError: %s\n", e.Text)
+			case EntryWidget:
+				fmt.Fprintf(&b, "  [widget %s]\n", widgetSummary(e))
 			}
 		}
 		for _, q := range s.Queued {
@@ -351,6 +433,8 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 		}
 		a.Interrupt()
 		return "Interrupted.", nil
+	case widgetTool:
+		return m.hub.Dispatcher.ShowWidget(args)
 	case "get_theme", "save_theme":
 		return m.themeCall(name, args)
 	case "get_sprite", "save_sprite", "delete_sprite":

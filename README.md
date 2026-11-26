@@ -215,13 +215,41 @@ one session per task under a shared goal name. It cannot answer permission
 prompts. Those stay with you.
 
 Its tools are served over MCP by Switchboard on `127.0.0.1`, on a random
-port and path chosen at startup. Only the dispatcher is given the address.
+port and path chosen at startup. Each Claude session gets its own random
+path on the same port, which offers only `show_widget` and acts only on that
+session.
 
 Session processes run at a lower priority than the dispatcher and the
 window. Switchboard checks CPU and memory every 15 seconds while a session
 is working. It tells the dispatcher when the machine becomes overloaded and
 when it recovers. The dispatcher then holds back new sessions and can pause
 the busiest one that is building or testing.
+
+### Widgets
+
+Claude sessions and the dispatcher can show widgets in their conversation
+with the `show_widget` tool: a table, progress bars, a list of keys and
+values, a bar or line chart, a row of buttons, or a short form. The tool
+never asks for permission. Switchboard draws every widget itself from a
+fixed schema, in plain text with an optional good, warn or bad tone. A widget
+cannot open links or files, and it cannot draw outside its card in the
+conversation.
+
+The agent updates a widget by showing it again with the same id. Clicking a
+button or submitting a form locks the widget and sends the agent a message
+with the answer. The message does not appear in the conversation. If the
+session is working or waiting on a permission prompt, the answer waits in
+the pending list until the turn ends. Clearing it there makes the widget
+answerable again. A widget the user answered cannot be changed.
+
+Limits per call: 64 KB of input, 500 rows and 12 columns in a table, 200
+characters per cell, 200 points per chart series and two series, 12 form
+fields and 6 buttons. A conversation holds up to 50 widgets. Widgets are
+rebuilt from Claude's transcript after a restart, and unanswered ones still
+work. Codex and Gemini sessions do not get the tool.
+
+When the dispatcher shows a widget, the strip says so and Open shows its
+conversation.
 
 ### After a restart
 

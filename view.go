@@ -45,6 +45,7 @@ type View struct {
 	stats                      map[string]*caution.Node
 	console                    *caution.Node
 	dDot, dLine, dActions, cmd *caution.Node
+	dOpen                      *caution.Node
 	dStatus                    *caution.Node
 	tiles                      map[*Agent]*tile
 	order, shown               []*Agent
@@ -266,8 +267,9 @@ func (v *View) buildConsole() *caution.Node {
 	v.dDot = caution.Panel().W(8).H(8).Radius(4)
 	v.dLine = caution.Label("").FontSize(12).Color("$inkDim").Anchor(caution.A{Left: px(0), Right: px(0), CenterY: px(0)})
 	v.dActions = caution.HStack().Gap(6).Align("center")
+	v.dOpen = caution.HStack().Align("center")
 	v.dStatus = caution.HStack().Gap(8).Align("center").W(statusW).Clips().
-		Kids(v.dDot, caution.Panel().Fill(1).H(consoleH).Clips().Kids(v.dLine), v.dActions)
+		Kids(v.dDot, caution.Panel().Fill(1).H(consoleH).Clips().Kids(v.dLine), v.dOpen, v.dActions)
 	if v.s != nil {
 		v.fitConsole(v.s.Viewport())
 	}
@@ -318,10 +320,18 @@ func (v *View) updateDispatcher(s Snapshot) {
 	tok := "$" + stateToken(s.State)
 	v.dDot.Bg(tok)
 	line, color := "Dispatcher is idle", "$inkFaint"
+	widget := false
 	for i := len(s.Entries) - 1; i >= 0; i-- {
 		e := s.Entries[i]
 		if e.Kind == EntryAssistant {
 			line, color = plain(e.Text), "$inkDim"
+			break
+		}
+		if e.Kind == EntryWidget {
+			line, color, widget = "Dispatcher shows a "+e.Widget.Kind, "$inkDim", true
+			if e.Widget.Title != "" {
+				line += ": " + e.Widget.Title
+			}
 			break
 		}
 		if e.Kind == EntryUser {
@@ -339,6 +349,13 @@ func (v *View) updateDispatcher(s Snapshot) {
 		line = fmt.Sprintf("%d pending  ·  %s", n, line)
 	}
 	v.dLine.SetText(strings.Join(strings.Fields(line), " ")).SetColor(color).Tip(line)
+	if widget != (len(v.dOpen.Children()) > 0) {
+		v.dOpen.Clear()
+		if widget {
+			v.dOpen.Add(caution.Button("Open").Tip("Show the dispatcher's conversation").
+				OnClick(func() { v.openFocus(v.hub.Dispatcher) }))
+		}
+	}
 
 	key := ""
 	if len(s.Pending) > 0 {

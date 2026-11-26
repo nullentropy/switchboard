@@ -20,6 +20,10 @@ type shown struct {
 	detail *caution.Node
 	open   bool
 	run    *toolRun
+	idx    int
+	wid    string
+	drawn  time.Time
+	due    bool
 }
 
 type focusView struct {
@@ -298,12 +302,19 @@ func (f *focusView) showQueued(qs []Queued, st State) {
 	f.pend.Pad(map[bool]float64{true: 0, false: 28}[len(qs) == 0])
 	for _, q := range qs {
 		id := q.ID
-		who := "You"
-		if q.From == "dispatcher" {
+		who, text := "You", q.Text
+		switch q.From {
+		case "dispatcher":
 			who = "Dispatcher"
+		case "widget":
+			text = widgetEventLabel(q.Text)
 		}
 		var actions *caution.Node
-		if q.Editing {
+		if q.From == "widget" {
+			actions = caution.HStack().Gap(6).Align("center").Kids(
+				caution.Button("Clear").Tip("Drop it; the widget can be answered again").OnClick(func() { go f.a.ClearQueued(id) }),
+				caution.Button("Send now").Tip("Interrupt the turn and deliver pending messages now ("+shiftLabel+modLabel+"E)").OnClick(func() { go f.a.SendNow("") }))
+		} else if q.Editing {
 			actions = caution.HStack().Gap(6).Align("center").Kids(
 				caution.Label("Editing in the message box").FontSize(12).Color("$inkFaint"),
 				caution.Button("Cancel").Tip("Keep the original text (Esc)").OnClick(f.cancelEdit))
@@ -318,7 +329,7 @@ func (f *focusView) showQueued(qs []Queued, st State) {
 				caution.Label(who).FontSize(12).Weight(600).Color("$inkDim"),
 				caution.Label("Pending").FontSize(11).Weight(600).Color("$stNeed")),
 			caution.VStack().Gap(8).Fill(1).Align("stretch").Kids(
-				caution.RichText(caution.Span{Text: q.Text}).FontSize(14).Italic().Color("$inkDim").Selectable(),
+				caution.RichText(caution.Span{Text: text}).FontSize(14).Italic().Color("$inkDim").Selectable(),
 				caution.Label(queuedNote(st)).FontSize(12).Color("$inkFaint"),
 				actions),
 		))
@@ -480,6 +491,9 @@ func (f *focusView) addEntry(e Entry) shown {
 		f.fold(f.run)
 		f.run = nil
 	}
+	if e.Kind == EntryWidget {
+		return f.addWidget(e)
+	}
 	gutter := caution.Label("").FontSize(12).Weight(600).W(72)
 	body := caution.VStack().Gap(4).Fill(1).Align("stretch")
 	switch e.Kind {
@@ -605,6 +619,10 @@ func (f *focusView) unfold(r *toolRun) {
 }
 
 func (f *focusView) refreshEntry(sh *shown, e Entry) {
+	if e.Kind == EntryWidget && sh.wid != "" {
+		f.refreshWidget(sh, e)
+		return
+	}
 	sh.rev = e.Rev
 	if e.Kind != EntryTool {
 		return

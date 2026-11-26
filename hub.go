@@ -62,6 +62,7 @@ type Hub struct {
 	restart      func() error
 	updater      *updater
 	stageMu      sync.Mutex
+	mcp          *mcpServer
 }
 
 func newHub(bins map[string]string, path string) *Hub {
@@ -228,13 +229,13 @@ func titleFrom(prompt, dir string) string {
 
 func (h *Hub) Remove(a *Agent, dropWorktree bool) {
 	a.Stop()
-	m := a.Snapshot().Meta
-	if m.Repo != "" {
-		dropCheckpoints(m.Repo, m.ID)
+	meta := a.Snapshot().Meta
+	if meta.Repo != "" {
+		dropCheckpoints(meta.Repo, meta.ID)
 	}
 	if dropWorktree {
-		if err := removeWorktree(m); err != nil {
-			log.Printf("remove worktree %s: %v", m.Worktree, err)
+		if err := removeWorktree(meta); err != nil {
+			log.Printf("remove worktree %s: %v", meta.Worktree, err)
 		}
 	}
 	h.mu.Lock()
@@ -244,7 +245,11 @@ func (h *Hub) Remove(a *Agent, dropWorktree bool) {
 			break
 		}
 	}
+	m := h.mcp
 	h.mu.Unlock()
+	if m != nil {
+		m.forget(a)
+	}
 	h.save()
 	h.each(func(v *View) { v.agentRemoved(a) })
 }
