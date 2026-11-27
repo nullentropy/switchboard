@@ -69,6 +69,8 @@ func stateIcon(s State) string {
 		return icRetry
 	case Waiting:
 		return icPause
+	case Background:
+		return icLayers
 	}
 	return icPause
 }

@@ -318,12 +318,20 @@ func statusText(s Snapshot) (string, string) {
 	case Waiting:
 		return "Waiting for usage limit, resumes " + resumeLabel(s.Meta.ResumeAt, clock()), "$stNeed"
 	case Working, Starting:
+		if h := helperLine(s.Subs); h != "" {
+			return h, "$ink"
+		}
 		if s.Activity == "" {
 			return "Starting", "$inkDim"
 		}
 		return plainActivity(s.Activity), "$ink"
+	case Background:
+		return waitingOn(s.Subs), "$stBg"
 	}
 	if s.State == Interrupted {
+		if s.Meta.Last == "background" {
+			return "Its background work stopped when Switchboard quit. A message picks it up again.", "$stNeed"
+		}
 		return "Interrupted when Switchboard quit mid-turn. A message picks it up again.", "$stNeed"
 	}
 	if r := lastReply(s.Entries); r != "" {
@@ -333,6 +341,15 @@ func statusText(s Snapshot) (string, string) {
 		return "Ended. A message picks it up again.", "$inkFaint"
 	}
 	return "Waiting for your first message", "$inkFaint"
+}
+
+func helperLine(subs []Sub) string {
+	for i := len(subs) - 1; i >= 0; i-- {
+		if s := subs[i]; !s.BG && s.Activity != "" {
+			return "Helper " + s.Desc + ": " + plainActivity(s.Activity)
+		}
+	}
+	return ""
 }
 
 func plainActivity(act string) string {
@@ -397,7 +414,7 @@ func (t *tile) buildAction(s Snapshot) {
 	switch s.State {
 	case Working, Starting:
 		t.action.Add(iconButton(icPause, "Interrupt this turn (.)", a.Interrupt))
-	case Ready, Stopped, Interrupted:
+	case Ready, Stopped, Interrupted, Background:
 		t.action.Add(caution.Button("Reply").Tip("Open and write the next message (Enter)").OnClick(func() { t.v.openFocus(a) }))
 	case Failed:
 		t.action.Add(iconButton(icRetry, "Send the last message again", func() { go retry(a) }))

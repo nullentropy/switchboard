@@ -15,7 +15,7 @@ var themes = map[string]map[string]string{
 		"panel": "#1a1d23", "panelAlt": "#16191e", "panelInset": "#0e1013",
 		"edge": "#2b3039", "edgeSoft": "#242830", "titlebar": "#16191e",
 		"control": "#232730", "controlEdge": "#363c48", "accent": "#5b8cff",
-		"stWork": "#5b8cff", "stNeed": "#f5a524", "stReady": "#3ecf8e", "stFail": "#f0525c", "stIdle": "#5d6470",
+		"stWork": "#5b8cff", "stNeed": "#f5a524", "stReady": "#3ecf8e", "stFail": "#f0525c", "stIdle": "#5d6470", "stBg": "#a78bfa",
 		"phThink": "#4a5160", "phRead": "#3fa7c9", "phEdit": "#8b6cff", "phRun": "#5b8cff", "phTest": "#3ecf8e", "phNone": "#22262e",
 		"workBg": "#1f2532", "hover": "#ffffff0a", "needBg": "#2a2114", "userBg": "#1f2633", "codeBg": "#0e1013",
 	},
@@ -24,7 +24,7 @@ var themes = map[string]map[string]string{
 		"panel": "#ffffff", "panelAlt": "#f7f8fa", "panelInset": "#f0f2f5",
 		"edge": "#d6dae1", "edgeSoft": "#e4e7ec", "titlebar": "#f7f8fa",
 		"control": "#f2f3f6", "controlEdge": "#c9ced7", "accent": "#2f6bff",
-		"stWork": "#2f6bff", "stNeed": "#d98a00", "stReady": "#169c63", "stFail": "#d93644", "stIdle": "#9aa1ab",
+		"stWork": "#2f6bff", "stNeed": "#d98a00", "stReady": "#169c63", "stFail": "#d93644", "stIdle": "#9aa1ab", "stBg": "#7c4dff",
 		"phThink": "#c3c8d0", "phRead": "#1f8fb5", "phEdit": "#7351f0", "phRun": "#2f6bff", "phTest": "#169c63", "phNone": "#e6e9ee",
 		"workBg": "#f2f6ff", "hover": "#0000000a", "needBg": "#fff6e5", "userBg": "#eaf0ff", "codeBg": "#f0f2f5",
 	},
@@ -33,7 +33,7 @@ var themes = map[string]map[string]string{
 		"panel": "#0a140c", "panelAlt": "#08100a", "panelInset": "#040805",
 		"edge": "#1d3a24", "edgeSoft": "#142a19", "titlebar": "#08100a",
 		"control": "#0f2214", "controlEdge": "#2a5a35", "accent": "#23a24a",
-		"stWork": "#5dff86", "stNeed": "#ffd23f", "stReady": "#8dffa8", "stFail": "#ff5f56", "stIdle": "#2f5f3b",
+		"stWork": "#5dff86", "stNeed": "#ffd23f", "stReady": "#8dffa8", "stFail": "#ff5f56", "stIdle": "#2f5f3b", "stBg": "#4dd2c4",
 		"phThink": "#1f4a2a", "phRead": "#3fd0a0", "phEdit": "#b0ff5d", "phRun": "#5dff86", "phTest": "#8dffa8", "phNone": "#0d1a10",
 		"workBg": "#102415", "hover": "#9dffb010", "needBg": "#1c1a07", "userBg": "#0d2112", "codeBg": "#040805",
 	},
@@ -42,7 +42,7 @@ var themes = map[string]map[string]string{
 		"panel": "#150e04", "panelAlt": "#110b03", "panelInset": "#080501",
 		"edge": "#3d2a0d", "edgeSoft": "#2c1e09", "titlebar": "#110b03",
 		"control": "#22170a", "controlEdge": "#5a3e14", "accent": "#ffb347",
-		"stWork": "#ffb347", "stNeed": "#ff6b3d", "stReady": "#ffe0a3", "stFail": "#ff4d3d", "stIdle": "#6a4c1c",
+		"stWork": "#ffb347", "stNeed": "#ff6b3d", "stReady": "#ffe0a3", "stFail": "#ff4d3d", "stIdle": "#6a4c1c", "stBg": "#e8a0ff",
 		"phThink": "#4a3410", "phRead": "#ffd27a", "phEdit": "#ff9f43", "phRun": "#ffb347", "phTest": "#ffe0a3", "phNone": "#1c1306",
 		"workBg": "#251a09", "hover": "#ffcf7a10", "needBg": "#2a1206", "userBg": "#221607", "codeBg": "#080501",
 	},
@@ -51,7 +51,7 @@ var themes = map[string]map[string]string{
 		"panel": "#282828", "panelAlt": "#232425", "panelInset": "#171919",
 		"edge": "#504945", "edgeSoft": "#3c3836", "titlebar": "#232425",
 		"control": "#3c3836", "controlEdge": "#665c54", "accent": "#458588",
-		"stWork": "#83a598", "stNeed": "#fabd2f", "stReady": "#b8bb26", "stFail": "#fb4934", "stIdle": "#7c6f64",
+		"stWork": "#83a598", "stNeed": "#fabd2f", "stReady": "#b8bb26", "stFail": "#fb4934", "stIdle": "#7c6f64", "stBg": "#d3869b",
 		"phThink": "#504945", "phRead": "#8ec07c", "phEdit": "#d3869b", "phRun": "#83a598", "phTest": "#b8bb26", "phNone": "#32302f",
 		"workBg": "#26302f", "hover": "#ebdbb20a", "needBg": "#352a17", "userBg": "#32302f", "codeBg": "#171919",
 	},
@@ -76,7 +76,14 @@ func themeTokens(set Settings, name string) map[string]string {
 		return t
 	}
 	if t := set.Themes[name]; t != nil {
-		return t
+		if t["stBg"] != "" {
+			return t
+		}
+		out := map[string]string{"stBg": themes["Gruvbox"]["stBg"]}
+		for k, v := range t {
+			out[k] = v
+		}
+		return out
 	}
 	return themes["Gruvbox"]
 }
@@ -93,6 +100,8 @@ func stateToken(s State) string {
 		return "stFail"
 	case Interrupted, Waiting:
 		return "stNeed"
+	case Background:
+		return "stBg"
 	}
 	return "stIdle"
 }

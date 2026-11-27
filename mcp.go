@@ -27,7 +27,7 @@ When the user asks for a new busy animation, use get_sprite to see the grid, the
 The user's machine has limited CPU and memory, and sessions that compile or run tests can make it unresponsive. Before starting more than one session, check system_load and start only as many as it has room for: when it is busy, start one, and start the rest as earlier ones finish. Switchboard also tells you, in a [switchboard] message, when the machine becomes overloaded and when it recovers. When it is overloaded, start nothing new. If it stays overloaded, interrupt the busiest session that is building or testing and send it a message to wait. When it recovers, tell the sessions you held back to continue, and start the ones you deferred. Tell the user in one sentence when you hold work back for load.
 When you start several sessions in one repository, each one after the first gets its own git worktree and branch unless you set worktree.
 When the user asks to clear finished sessions off the wall, stop each one with stop_session and then remove it with remove_session. remove_session refuses a session whose worktree still has uncommitted changes or unmerged commits; tell the user which ones and what is left.
-When a table, progress view, chart, keyvalue list, a choice between buttons or a short form would show the user something better than text, use show_widget. It renders in your conversation, and the strip tells the user it is there.
+A show_widget widget renders in your conversation, and the strip tells the user it is there. ` + widgetTriggers + `
 When the user asks whether Switchboard is up to date or to update it, use check_for_updates; it downloads a newer release but never restarts Switchboard, so tell the user the update is ready and that they restart Switchboard themselves.
 Your replies show in a small strip, so keep them to one to three short sentences.`
 
@@ -109,7 +109,8 @@ func (h *Hub) sessionMCPArgs(a *Agent) []string {
 	}
 	cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{
 		"switchboard": map[string]any{"type": "http", "url": m.sessionURL(a)}}})
-	return []string{"--mcp-config", string(cfg), "--allowedTools", widgetToolFull}
+	return []string{"--mcp-config", string(cfg), "--allowedTools", widgetToolFull,
+		"--append-system-prompt", sessionPrompt}
 }
 
 type rpcReq struct {
@@ -211,9 +212,9 @@ var (
 )
 
 var toolDefs = []map[string]any{
-	{"name": "system_load", "description": "How loaded the machine is: load average against its cores, free memory and swap, whether it is overloaded, and each session's CPU and memory with its busiest process.",
+	{"name": "system_load", "description": "How loaded the machine is: load average against its cores, free memory and swap, whether it is overloaded, and each session's CPU and memory with its busiest process and the subagents and background commands it is running.",
 		"inputSchema": obj(map[string]any{})},
-	{"name": "list_sessions", "description": "Every session on the wall: id, title, folder, branch, state, current activity, last reply, anything waiting on the user, how many messages are pending (sent mid-turn, not yet delivered), and cost. State is Starting, Working, Needs you, Ready, Failed, Interrupted, Waiting for limit or Stopped. Interrupted means Switchboard quit in the middle of its turn; a message resumes it. Waiting for limit means a usage limit stopped its turn; resumes_at says when Switchboard sends it a continue message, and a message from you resumes it now. Stopped means the user or you stopped it.",
+	{"name": "list_sessions", "description": "Every session on the wall: id, title, folder, branch, state, current activity, last reply, anything waiting on the user, how many messages are pending (sent mid-turn, not yet delivered), and cost. State is Starting, Working, Needs you, Background, Ready, Failed, Interrupted, Waiting for limit or Stopped. Background means its turn ended but subagents or background commands it started are still running; each one wakes it when it finishes, and a message reaches it at once. background lists every subagent and background command running in a session: kind (agent, command or monitor), description and running_seconds. Interrupted means Switchboard quit in the middle of its turn or while it had background work running; a message resumes it. Waiting for limit means a usage limit stopped its turn; resumes_at says when Switchboard sends it a continue message, and a message from you resumes it now. Stopped means the user or you stopped it.",
 		"inputSchema": obj(map[string]any{})},
 	{"name": "read_session", "description": "The recent transcript of one session, oldest first.",
 		"inputSchema": obj(map[string]any{"session": idProp, "limit": map[string]any{"type": "integer", "description": "How many entries, default 20."}}, "session")},
@@ -293,6 +294,13 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 			}
 			if len(s.Queued) > 0 {
 				row["pending_messages"] = len(s.Queued)
+			}
+			if bg := background(s.Subs); len(bg) > 0 {
+				var list []map[string]any
+				for _, b := range bg {
+					list = append(list, map[string]any{"kind": b.Kind, "description": b.Desc, "running_seconds": int(time.Since(b.Start).Seconds())})
+				}
+				row["background"] = list
 			}
 			if s.State == Waiting {
 				row["resumes_at"] = s.Meta.ResumeAt.Format(time.RFC3339)

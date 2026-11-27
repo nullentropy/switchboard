@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,18 +24,26 @@ const (
 	Failed
 	Interrupted
 	Waiting
+	Background
 )
 
 func (s State) String() string {
-	return [...]string{"Stopped", "Starting", "Working", "Needs you", "Ready", "Failed", "Interrupted", "Waiting for limit"}[s]
+	return [...]string{"Stopped", "Starting", "Working", "Needs you", "Ready", "Failed", "Interrupted", "Waiting for limit", "Background"}[s]
 }
 
 // lastState is how a session is shown after a restart, when its process is
 // gone. A Stopped session counts only when the user or dispatcher stopped it.
 func (a *Agent) lastState() string {
 	switch a.State {
-	case Working, Starting, Interrupted:
+	case Working, Starting:
 		return "interrupted"
+	case Interrupted:
+		if a.Meta.Last == "background" {
+			return "background"
+		}
+		return "interrupted"
+	case Background:
+		return "background"
 	case NeedsYou, Ready:
 		return "ready"
 	case Failed:
@@ -51,7 +60,7 @@ func (a *Agent) lastState() string {
 
 func restoredState(last string) State {
 	switch last {
-	case "interrupted":
+	case "interrupted", "background":
 		return Interrupted
 	case "failed":
 		return Failed
@@ -194,10 +203,46 @@ type Mark struct {
 
 type Sub struct {
 	ID       string
+	TaskID   string
+	Kind     string
 	Desc     string
 	Activity string
-	bg       bool
-	seen     time.Time
+	Start    time.Time
+	BG       bool
+}
+
+func background(subs []Sub) []Sub {
+	var out []Sub
+	for _, s := range subs {
+		if s.BG {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func workCounts(subs []Sub) string {
+	n := map[string]int{}
+	for _, s := range subs {
+		n[s.Kind]++
+	}
+	var parts []string
+	for _, k := range []string{"agent", "command", "monitor"} {
+		switch {
+		case n[k] == 1:
+			parts = append(parts, "1 "+k)
+		case n[k] > 1:
+			parts = append(parts, fmt.Sprintf("%d %ss", n[k], k))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+func waitingOn(subs []Sub) string {
+	if c := workCounts(background(subs)); c != "" {
+		return "Waiting on " + c
+	}
+	return ""
 }
 
 type Snapshot struct {
@@ -424,7 +469,7 @@ func (a *Agent) SendNow(text string) {
 
 func (a *Agent) flush() {
 	a.mu.Lock()
-	ready := a.State == Ready && a.editing == 0 && len(a.queue) > 0
+	ready := (a.State == Ready || a.State == Background) && a.editing == 0 && len(a.queue) > 0
 	a.mu.Unlock()
 	if ready {
 		a.SendFrom("", "")
@@ -461,7 +506,7 @@ func (a *Agent) SendFrom(text, from string) {
 		return
 	}
 	var old *proc
-	if a.p != nil && a.procModel != a.Meta.Model && a.State != NeedsYou {
+	if a.p != nil && a.procModel != a.Meta.Model && a.State != NeedsYou && !a.hasBackground() {
 		old, a.p = a.p, nil
 		a.costBase += a.procCost
 		a.procCost = 0
@@ -726,12 +771,43 @@ func (a *Agent) turnEnd(errText string) {
 	a.station = ""
 	a.turn = ""
 	a.clearSubs()
+	if a.hasBackground() {
+		a.State = Background
+	}
 	go a.refreshBranch()
 	if a.editing == 0 && len(a.queue) > 0 {
 		go a.flush()
 		return
 	}
+	if a.State == Background {
+		go a.hub.report(a, "finished its turn, "+strings.ToLower(waitingOn(a.subList())))
+		return
+	}
 	go a.hub.done(a)
+}
+
+func (a *Agent) hasBackground() bool {
+	for _, s := range a.subs {
+		if s.BG {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Agent) wake() {
+	if a.State != Ready && a.State != Background {
+		return
+	}
+	a.State = Working
+	a.Activity = "Thinking"
+	a.TurnFrom = time.Now()
+}
+
+func (a *Agent) settle() {
+	if a.State == Background && !a.hasBackground() {
+		a.State = Ready
+	}
 }
 
 func (a *Agent) exited(p *proc, err error) {
@@ -743,7 +819,7 @@ func (a *Agent) exited(p *proc, err error) {
 	a.p = nil
 	a.station = ""
 	a.turn = ""
-	a.clearSubs()
+	a.subs, a.subOrder = nil, nil
 	a.costBase += a.procCost
 	a.procCost = 0
 	a.Pending = nil
@@ -766,21 +842,24 @@ func (a *Agent) subList() []Sub {
 	var out []Sub
 	for _, id := range a.subOrder {
 		if s, ok := a.subs[id]; ok {
-			if s.bg && time.Since(s.seen) > 45*time.Second {
-				continue
-			}
 			out = append(out, *s)
 		}
 	}
 	return out
 }
 
+func (a *Agent) dropSub(id string) {
+	delete(a.subs, id)
+	a.subOrder = slices.DeleteFunc(a.subOrder, func(x string) bool { return x == id })
+}
+
 func (a *Agent) clearSubs() {
 	for id, s := range a.subs {
-		if !s.bg {
+		if !s.BG {
 			delete(a.subs, id)
 		}
 	}
+	a.subOrder = slices.DeleteFunc(a.subOrder, func(id string) bool { return a.subs[id] == nil })
 }
 
 func (a *Agent) refreshBranch() {

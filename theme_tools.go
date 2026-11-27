@@ -14,7 +14,7 @@ var tokenRoles = map[string]string{
 	"panel": "tiles and bars", "panelAlt": "side list and status bar", "panelInset": "inset fields",
 	"edge": "strong borders", "edgeSoft": "dividers", "titlebar": "header bar",
 	"control": "buttons and selected rows", "controlEdge": "button borders", "accent": "primary buttons and links",
-	"stWork": "working state", "stNeed": "needs-you state", "stReady": "done state", "stFail": "failed state", "stIdle": "idle state",
+	"stWork": "working state", "stNeed": "needs-you state", "stReady": "done state", "stFail": "failed state", "stIdle": "idle state", "stBg": "waiting on background work",
 	"phThink": "activity strip: thinking", "phRead": "activity strip: reading", "phEdit": "activity strip: editing",
 	"phRun": "activity strip: running commands", "phTest": "activity strip: testing", "phNone": "activity strip: nothing",
 	"workBg": "working tile fill", "hover": "hover tint, usually translucent", "needBg": "needs-you card fill",

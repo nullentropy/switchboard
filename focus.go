@@ -52,6 +52,14 @@ type focusView struct {
 	cleared    int
 	queued     string
 	editing    int
+	work       *caution.Node
+	workKey    string
+	workTimers []workTimer
+}
+
+type workTimer struct {
+	start time.Time
+	label *caution.Node
 }
 
 type userRow struct {
@@ -150,6 +158,7 @@ func (f *focusView) build() {
 		caution.VStack().Align("stretch").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)}).Kids(f.list, f.pend))
 
 	f.card = caution.Panel().Dock("bottom").H(0).Bg("$needBg").Clips()
+	f.work = caution.Panel().Dock("bottom").H(0).Bg("$panelAlt").Clips()
 
 	f.activity = caution.Label("").FontSize(12).Mono().Color("$inkDim").
 		Anchor(caution.A{Left: px(0), Right: px(0), CenterY: px(0)})
@@ -187,6 +196,7 @@ func (f *focusView) build() {
 		f.noteBar,
 		caution.Panel().Dock("bottom").H(1).Bg("$edgeSoft"),
 		f.statusBar,
+		f.work,
 		f.card,
 		f.scroll,
 	)
@@ -345,6 +355,9 @@ func (f *focusView) update(s Snapshot) {
 	tok := "$" + stateToken(s.State)
 	f.title.SetText(s.Meta.Title)
 	f.stateL.SetText(s.State.String()).SetColor(tok)
+	if s.State == Background {
+		f.stateL.SetText(waitingOn(s.Subs))
+	}
 	f.icon.set(stateIcon(s.State), tok)
 	where := shortPath(s.Meta.Cwd)
 	if s.Branch != "" {
@@ -363,6 +376,10 @@ func (f *focusView) update(s Snapshot) {
 		act = oneLine(s.Err)
 	case act == "" && s.State == Ready:
 		act = "Ready"
+	case s.State == Background:
+		act = waitingOn(s.Subs) + ". Each one wakes it when it finishes; a message reaches it now."
+	case s.State == Interrupted && s.Meta.Last == "background":
+		act = "Its background work stopped when Switchboard quit. Sending a message picks it up again."
 	case s.State == Interrupted:
 		act = "Interrupted when Switchboard quit mid-turn. Sending a message picks it up again."
 	case s.State == Waiting:
@@ -375,7 +392,8 @@ func (f *focusView) update(s Snapshot) {
 	f.activity.SetText(act)
 	f.activityFX.set(f.v.set, act, 12, true, thinking(s))
 	f.busy.set(s)
-	f.activity.SetColor(map[bool]string{true: tok, false: "$inkDim"}[s.State == NeedsYou || s.State == Failed || s.State == Interrupted || s.State == Waiting])
+	f.activity.SetColor(map[bool]string{true: tok, false: "$inkDim"}[s.State == NeedsYou || s.State == Failed || s.State == Interrupted || s.State == Waiting || s.State == Background])
+	f.showWork(s.Subs)
 
 	if s.Cleared != f.cleared {
 		f.cleared = s.Cleared
@@ -428,6 +446,42 @@ func (f *focusView) update(s Snapshot) {
 	f.tickClock()
 }
 
+func (f *focusView) showWork(subs []Sub) {
+	key := fmt.Sprint(subs)
+	if key == f.workKey {
+		return
+	}
+	f.workKey = key
+	f.work.Clear()
+	f.workTimers = nil
+	if len(subs) == 0 {
+		f.work.H(0)
+		return
+	}
+	rows := caution.VStack().Gap(4).Align("stretch").Anchor(caution.A{Left: px(24), Right: px(24), Top: px(8)})
+	for _, s := range subs {
+		color, kind := "$stWork", "Helper"
+		if s.BG {
+			color, kind = "$stBg", map[string]string{"agent": "Agent", "command": "Command", "monitor": "Monitor"}[s.Kind]
+		}
+		step := ""
+		if s.Activity != "" {
+			step = plainActivity(s.Activity)
+		}
+		timer := caution.Label(elapsed(time.Since(s.Start))).FontSize(12).Color("$inkFaint")
+		f.workTimers = append(f.workTimers, workTimer{s.Start, timer})
+		rows.Add(caution.HStack().Gap(10).Align("center").H(20).Kids(
+			caution.Label(kind).FontSize(11).Weight(650).Color(color).W(64),
+			caution.Label(clip(s.Desc, 60)).FontSize(12).Color("$ink"),
+			caution.Panel().Fill(1).H(20).Clips().Kids(
+				caution.Label(step).FontSize(12).Mono().Color("$inkDim").Anchor(caution.A{Left: px(0), Right: px(0), CenterY: px(0)})),
+			timer,
+		))
+	}
+	f.work.Kids(caution.Panel().H(1).Bg("$edgeSoft").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)}), rows)
+	f.work.H(16 + 24*float64(len(subs)))
+}
+
 func (sh *shown) tickTimer() {
 	if sh.timer == nil || sh.start.IsZero() {
 		return
@@ -463,6 +517,9 @@ func (f *focusView) tickClock() {
 		if f.shown[i].end.IsZero() {
 			f.shown[i].tickTimer()
 		}
+	}
+	for _, w := range f.workTimers {
+		w.label.SetText(elapsed(time.Since(w.start)))
 	}
 	var parts []string
 	if (f.state == Working || f.state == Starting || f.state == NeedsYou) && !f.turnFrom.IsZero() {

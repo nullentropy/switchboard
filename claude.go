@@ -133,8 +133,13 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 				id, _ := m["session_id"].(string)
 				a.adoptSession(id)
 			}
+			if !a.replaying {
+				a.wake()
+			}
 			a.live()
 			return true
+		case "task_started", "task_notification", "background_tasks_changed":
+			return claudeTask(a, sub, m)
 		case "thinking_tokens":
 			if a.State == Working && a.Activity != "Thinking" {
 				a.think()
@@ -175,7 +180,7 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 					if a.subs == nil {
 						a.subs = map[string]*Sub{}
 					}
-					a.subs[id] = &Sub{ID: id, Desc: sum, seen: time.Now()}
+					a.subs[id] = &Sub{ID: id, Kind: "agent", Desc: sum, Start: time.Now()}
 					a.subOrder = append(a.subOrder, id)
 				}
 			case "thinking":
@@ -196,11 +201,12 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 			id, _ := blk["tool_use_id"].(string)
 			text := resultText(blk["content"])
 			if s, ok := a.subs[id]; ok {
-				if strings.Contains(strings.ToLower(text), "background") {
-					s.bg = true
-					s.seen = time.Now()
-				} else {
-					delete(a.subs, id)
+				tur, _ := m["tool_use_result"].(map[string]any)
+				if async, _ := tur["isAsync"].(bool); async {
+					s.BG = true
+				}
+				if !s.BG {
+					a.dropSub(id)
 				}
 			}
 			isErr, _ := blk["is_error"].(bool)
@@ -260,7 +266,6 @@ func claudeSub(a *Agent, parent string, m map[string]any) bool {
 	if s == nil {
 		return false
 	}
-	s.seen = time.Now()
 	if m["type"] != "assistant" {
 		return false
 	}
@@ -275,6 +280,75 @@ func claudeSub(a *Agent, parent string, m map[string]any) bool {
 		}
 	}
 	return true
+}
+
+func claudeTask(a *Agent, sub string, m map[string]any) bool {
+	if a.replaying {
+		return false
+	}
+	if owned, _ := m["owned_by_subagent"].(bool); owned {
+		return false
+	}
+	str := func(k string) string { s, _ := m[k].(string); return s }
+	switch sub {
+	case "task_started":
+		id, typ := str("tool_use_id"), str("task_type")
+		bg, _ := m["is_backgrounded"].(bool)
+		s := a.subs[id]
+		switch {
+		case id == "":
+			return false
+		case s != nil:
+		case typ == "local_agent":
+			s = &Sub{ID: id, Kind: "agent", Desc: oneLine(str("description")), Start: time.Now()}
+		case typ == "local_bash" && bg:
+			kind := "command"
+			if i, ok := a.toolIdx[id]; ok && a.Entries[i].Tool == "Monitor" {
+				kind = "monitor"
+			}
+			s = &Sub{ID: id, Kind: kind, Desc: oneLine(str("description")), Start: time.Now()}
+		default:
+			return false
+		}
+		s.TaskID = str("task_id")
+		s.BG = s.BG || bg
+		if a.subs[id] == nil {
+			if a.subs == nil {
+				a.subs = map[string]*Sub{}
+			}
+			a.subs[id] = s
+			a.subOrder = append(a.subOrder, id)
+		}
+		return true
+	case "task_notification":
+		id := str("tool_use_id")
+		if s := a.subs[id]; s != nil && !s.BG {
+			a.dropSub(id)
+			return true
+		}
+		return false
+	case "background_tasks_changed":
+		live := map[string]bool{}
+		tasks, _ := m["tasks"].([]any)
+		for _, t := range tasks {
+			if tm, ok := t.(map[string]any); ok {
+				id, _ := tm["task_id"].(string)
+				live[id] = true
+			}
+		}
+		changed := false
+		for id, s := range a.subs {
+			if s.BG && s.TaskID != "" && !live[s.TaskID] {
+				a.dropSub(id)
+				changed = true
+			}
+		}
+		if changed {
+			a.settle()
+		}
+		return changed
+	}
+	return false
 }
 
 func claudeSummary(name string, in map[string]any) string {

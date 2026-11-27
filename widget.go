@@ -27,6 +27,16 @@ const (
 	widgetMaxLabel   = 40
 )
 
+const widgetTriggers = "Use show_widget on your own, without waiting to be asked. " +
+	"Show a table for any result with several rows of the same fields, such as files changed, test results, findings or timings, instead of writing a markdown table. " +
+	"Show progress for work with more than about three steps, and as each step finishes call show_widget again with the same id to update it in place. " +
+	"Show a chart for numbers compared across items or over time. " +
+	"Show a keyvalue list for a short status summary at the end of a turn. " +
+	"Still write your answer in prose; the widget goes alongside it, not instead of it. " +
+	"Ask the user questions with AskUserQuestion, never with a buttons or form widget."
+
+const sessionPrompt = "Switchboard shows this conversation in a window that renders widgets from the show_widget tool. " + widgetTriggers
+
 type Widget struct {
 	ID       string     `json:"id,omitempty"`
 	Kind     string     `json:"kind"`
@@ -568,7 +578,8 @@ var widgetToolDef = func() map[string]any {
 	return map[string]any{
 		"name": widgetTool,
 		"description": "Show a widget in this conversation, in Switchboard's window: a table, progress bars, a keyvalue list, a bar or line chart, a row of buttons, or a short form. " +
-			"Use it when the user reads something more easily as a widget than as text. Text in widgets is plain; markdown and links are not rendered. " +
+			widgetTriggers + " " +
+			"Text in widgets is plain; markdown and links are not rendered. " +
 			"Returns \"shown <id>\" or \"updated <id>\". Call it again with the same id to replace that widget in place, for example to advance progress bars. " +
 			"Updates to one widget show at most 4 times a second. A conversation holds at most 50 widgets. " +
 			"When the user clicks a button or submits a form, the widget locks and you get a message <switchboard-widget id=\"<id>\" kind=\"buttons\">{\"clicked\":\"<label>\"}</switchboard-widget>, " +

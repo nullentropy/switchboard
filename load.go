@@ -181,6 +181,9 @@ func (l sessionLoad) String() string {
 	if l.u.Top != "" {
 		t += ", busiest process " + l.u.Top
 	}
+	if c := workCounts(background(s.Subs)); c != "" {
+		t += ", running " + c + " in the background"
+	}
 	return t
 }
 

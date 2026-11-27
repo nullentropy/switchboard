@@ -30,6 +30,8 @@ func groupOf(s State) string {
 		return "int"
 	case Waiting:
 		return "wait"
+	case Background:
+		return "bg"
 	}
 	return "idle"
 }
@@ -40,7 +42,7 @@ func (v *View) buildBoard() *caution.Node {
 	v.goals = caution.VStack().Gap(8).Align("stretch")
 	v.sections = nil
 	for _, sc := range []struct{ key, title string }{
-		{"need", "Needs you"}, {"work", "Working"}, {"wait", "Waiting for limit"}, {"fail", "Failed"}, {"int", "Interrupted"}, {"done", "Done"}, {"idle", "Ended"},
+		{"need", "Needs you"}, {"work", "Working"}, {"bg", "Background work"}, {"wait", "Waiting for limit"}, {"fail", "Failed"}, {"int", "Interrupted"}, {"done", "Done"}, {"idle", "Ended"},
 	} {
 		s := &section{key: sc.key, title: sc.title, inbox: sc.key == "need"}
 		s.count = caution.Label("").FontSize(11).Weight(600).Color("$inkFaint")
@@ -70,7 +72,7 @@ func (v *View) buildBoard() *caution.Node {
 
 func (v *View) display() []*Agent {
 	var out []*Agent
-	for _, g := range []string{"need", "work", "wait", "fail", "int", "done", "idle"} {
+	for _, g := range []string{"need", "work", "bg", "wait", "fail", "int", "done", "idle"} {
 		for _, a := range v.order {
 			if t := v.tiles[a]; t != nil && groupOf(t.state) == g && (v.goal == "" || t.snap.Meta.Goal == v.goal) &&
 				(t.snap.Meta.Goal == v.goal || !v.hub.GoalDone(t.snap.Meta.Goal)) &&
@@ -284,7 +286,7 @@ func (v *View) markGoalDone(name string) {
 	var live []string
 	for _, a := range v.hub.goalSessions(name) {
 		switch s := a.Snapshot(); s.State {
-		case Working, Starting, NeedsYou, Waiting:
+		case Working, Starting, NeedsYou, Waiting, Background:
 			live = append(live, s.Meta.Title)
 		}
 	}
@@ -568,9 +570,9 @@ func (v *View) confirmResume(list []*Agent) {
 	if len(names) > 8 {
 		names = append(names[:7], fmt.Sprintf("• and %d more", len(list)-7))
 	}
-	head := "Switchboard quit while this session was in the middle of a turn:"
+	head := "Switchboard quit while this session was in the middle of a turn or had background work running:"
 	if len(list) > 1 {
-		head = fmt.Sprintf("Switchboard quit while these %d sessions were in the middle of a turn:", len(list))
+		head = fmt.Sprintf("Switchboard quit while these %d sessions were in the middle of a turn or had background work running:", len(list))
 	}
 	v.showDialog(caution.Dialog("Resume interrupted sessions?").CardSize(460, 170+18*float64(len(names))).Kids(
 		caution.VStack().Gap(8).Align("stretch").Anchor(caution.A{Left: px(20), Right: px(20), Top: px(16)}).Kids(

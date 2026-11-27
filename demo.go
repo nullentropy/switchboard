@@ -109,7 +109,7 @@ func (a *Agent) demoLoop(rng *rand.Rand) {
 			}
 			if st == "Read" && rng.Intn(3) == 0 && len(a.subs) == 0 {
 				id := newID()
-				a.subs = map[string]*Sub{id: {ID: id, Desc: "Consult the Guide", Activity: "Grep \"Improbability\"", seen: time.Now()}}
+				a.subs = map[string]*Sub{id: {ID: id, Desc: "Consult the Guide", Kind: "agent", Activity: "Grep \"Improbability\"", Start: time.Now()}}
 				a.subOrder = []string{id}
 			}
 			a.Cost += 0.01 + rng.Float64()*0.03

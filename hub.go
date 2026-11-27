@@ -406,9 +406,13 @@ func (h *Hub) takeInterrupted() []*Agent {
 
 const resumeNote = "[switchboard] Switchboard restarted while you were in the middle of a turn, so that turn stopped. Check where things stand and carry on where you left off."
 
+const resumeBackgroundNote = "[switchboard] Switchboard restarted while your background agents or commands were running, so they stopped and will not report back. Check where things stand and start again whatever still needs doing."
+
 func (h *Hub) Resume(list []*Agent) {
 	for _, a := range list {
-		if a.Snapshot().State == Interrupted {
+		if s := a.Snapshot(); s.State == Interrupted && s.Meta.Last == "background" {
+			go a.Send(resumeBackgroundNote)
+		} else if s.State == Interrupted {
 			go a.Send(resumeNote)
 		}
 	}
