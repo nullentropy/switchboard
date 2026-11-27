@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"syscall"
+	"time"
 
 	caution "github.com/nullentropy/caution"
 	"github.com/nullentropy/caution/native"
@@ -22,6 +23,7 @@ func main() {
 	statePath := flag.String("state", defaultStatePath(), "where the session list and settings are kept")
 	demo := flag.Bool("demo", false, "fill the window with pretend sessions, to look at the UI; nothing is saved")
 	demoN := flag.Int("demo-sessions", 7, "how many pretend sessions -demo starts")
+	defaultUI := flag.Bool("default-ui", false, "use the default interface for this run instead of the saved one (holding Shift at launch does the same on macOS and Windows)")
 	flag.Parse()
 	prepareApp()
 
@@ -35,6 +37,7 @@ func main() {
 	if !*demo {
 		startUpdates(hub, &flushWindow)
 	}
+	hub.bootUI(*defaultUI || shiftHeld())
 	go hub.loadCodexModels()
 	go hub.loadClaudeModels()
 	if err := checkBin(hub, "claude"); err != nil && !*demo {
@@ -51,6 +54,8 @@ func main() {
 		log.Fatalf("start the dispatcher's tool server: %v", err)
 	}
 	hub.Dispatcher.extraArgs = func() []string { return dispatcherArgs(mcpURL) }
+	hub.flushReports()
+	time.AfterFunc(uiStartGrace, hub.uiStarted)
 	defer hub.StopAll()
 	go func() {
 		sig := make(chan os.Signal, 1)

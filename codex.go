@@ -117,13 +117,17 @@ func (d *codexDriver) launch(a *Agent) (*proc, error) {
 	return p, nil
 }
 
-func (d *codexDriver) send(a *Agent, text string) error {
+func (d *codexDriver) send(a *Agent, text string, imgs []Image) error {
 	a.mu.Lock()
 	thread, mode, p := a.Meta.Thread, a.Meta.Mode, a.p
 	a.mu.Unlock()
 	approval, _, sandbox := codexPolicy(mode)
+	input, err := codexInput(text, imgs, imageDir())
+	if err != nil {
+		return err
+	}
 	raw, err := p.call("turn/start", map[string]any{"threadId": thread, "approvalPolicy": approval, "sandboxPolicy": sandbox,
-		"input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}}}, 60*time.Second)
+		"input": input}, 60*time.Second)
 	if err != nil {
 		return err
 	}

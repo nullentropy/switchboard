@@ -35,6 +35,7 @@ type focusView struct {
 	pend                                                                                    *caution.Node
 	icon                                                                                    *stateMark
 	modeSel                                                                                 *caution.Node
+	tray                                                                                    *tray
 
 	shown      []shown
 	run        *toolRun
@@ -180,6 +181,7 @@ func (f *focusView) build() {
 	})
 	f.composer.OnTab(f.mention.tab)
 	f.composer.OnSubmit(f.submit)
+	f.tray = newTray(f.v, "$panel")
 	f.note = caution.Label("").FontSize(12).Color("$stNeed").Anchor(caution.A{Left: px(24), Right: px(24), CenterY: px(0)})
 	f.noteBar = caution.Panel().Dock("bottom").H(0).Bg("$panel").Clips().Kids(f.note)
 	compose := caution.Panel().Dock("bottom").H(84).Bg("$panel").Kids(
@@ -192,6 +194,7 @@ func (f *focusView) build() {
 		top,
 		caution.Panel().Dock("top").H(1).Bg("$edgeSoft"),
 		compose,
+		f.tray.box,
 		f.mention.panel,
 		f.noteBar,
 		caution.Panel().Dock("bottom").H(1).Bg("$edgeSoft"),
@@ -215,17 +218,18 @@ func (f *focusView) send(text string) {
 		f.saveEdit(text)
 		return
 	}
-	if strings.TrimSpace(text) == "" {
+	if strings.TrimSpace(text) == "" && len(f.tray.imgs) == 0 {
 		return
 	}
 	f.composer.ClearValue()
 	f.mention.input("")
-	if w := strings.Fields(text); w[0] == "/clear" && f.a != f.v.hub.Dispatcher {
+	if w := strings.Fields(text); len(w) > 0 && w[0] == "/clear" && f.a != f.v.hub.Dispatcher {
 		f.say("/clear is only available in the dispatcher. Clearing a session would drop the context it needs to finish its task.")
 		return
 	}
 	f.say("")
-	go f.a.Send(text)
+	imgs := f.tray.take()
+	go f.a.SendImages(text, imgs)
 }
 
 func (f *focusView) edit(id int) {
@@ -283,7 +287,8 @@ func (f *focusView) sendNow() {
 	f.composer.ClearValue()
 	f.mention.input("")
 	f.say("")
-	go f.a.SendNow(text)
+	imgs := f.tray.take()
+	go f.a.SendNowImages(text, imgs)
 }
 
 func queuedNote(st State) string {
@@ -334,11 +339,15 @@ func (f *focusView) showQueued(qs []Queued, st State) {
 				caution.Button("Clear").Tip("Drop it; it is never delivered").OnClick(func() { go f.a.ClearQueued(id) }),
 				caution.Button("Send now").Tip("Interrupt the turn and deliver pending messages now ("+shiftLabel+modLabel+"E)").OnClick(func() { go f.a.SendNow("") }))
 		}
+		content := caution.VStack().Gap(8).Fill(1).Align("stretch")
+		if len(q.Images) > 0 {
+			content.Add(thumbs(q.Images))
+		}
 		f.pend.Add(caution.HStack().Gap(12).Kids(
 			caution.VStack().Gap(3).W(72).Kids(
 				caution.Label(who).FontSize(12).Weight(600).Color("$inkDim"),
 				caution.Label("Pending").FontSize(11).Weight(600).Color("$stNeed")),
-			caution.VStack().Gap(8).Fill(1).Align("stretch").Kids(
+			content.Kids(
 				caution.RichText(caution.Span{Text: text}).FontSize(14).Italic().Color("$inkDim").Selectable(),
 				caution.Label(queuedNote(st)).FontSize(12).Color("$inkFaint"),
 				actions),
@@ -556,7 +565,12 @@ func (f *focusView) addEntry(e Entry) shown {
 	switch e.Kind {
 	case EntryUser:
 		gutter.SetText("You").SetColor("$accent")
-		body.Add(caution.RichText(caution.Span{Text: e.Text}).FontSize(14).Selectable())
+		if len(e.Images) > 0 {
+			body.Add(thumbs(e.Images))
+		}
+		if e.Text != "" {
+			body.Add(caution.RichText(caution.Span{Text: e.Text}).FontSize(14).Selectable())
+		}
 		row := f.copyMenus(caution.HStack().Gap(12).Kids(gutter, body), e.Text, []caution.Span{{Text: e.Text}})
 		f.list.Add(row)
 		f.asks = append(f.asks, userRow{row: row, text: e.Text})

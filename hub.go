@@ -30,6 +30,8 @@ type Settings struct {
 	UpdatesOff bool                         `json:"updatesOff,omitempty"`
 	Sprites    map[string]SpriteDef         `json:"sprites,omitempty"`
 	SpritesOff []string                     `json:"spritesOff,omitempty"`
+	Interfaces map[string]json.RawMessage   `json:"interfaces,omitempty"`
+	Interface  string                       `json:"interface,omitempty"`
 }
 
 type saved struct {
@@ -37,6 +39,7 @@ type saved struct {
 	Sessions   []Meta   `json:"sessions"`
 	Dispatcher *Meta    `json:"dispatcher,omitempty"`
 	DoneGoals  []string `json:"doneGoals,omitempty"`
+	UIStarts   int      `json:"uiStarts,omitempty"`
 }
 
 type Hub struct {
@@ -63,6 +66,8 @@ type Hub struct {
 	updater      *updater
 	stageMu      sync.Mutex
 	mcp          *mcpServer
+	uiStarts     int
+	uiSkip       bool
 }
 
 func newHub(bins map[string]string, path string) *Hub {
@@ -75,6 +80,7 @@ func newHub(bins map[string]string, path string) *Hub {
 			log.Printf("read %s: %v", path, err)
 		} else {
 			h.settings = s.Settings
+			h.uiStarts = s.UIStarts
 			for _, g := range s.DoneGoals {
 				h.doneGoals[g] = true
 			}
@@ -120,9 +126,16 @@ func (h *Hub) Settings() Settings {
 	return h.settings
 }
 
-func (h *Hub) UpdateSettings(fn func(*Settings)) {
+func (h *Hub) UpdateSettings(fn func(*Settings)) { h.updateSettings(fn, false) }
+
+func (h *Hub) UseUI(fn func(*Settings)) { h.updateSettings(fn, true) }
+
+func (h *Hub) updateSettings(fn func(*Settings), endSkip bool) {
 	h.mu.Lock()
 	fn(&h.settings)
+	if endSkip {
+		h.uiSkip = false
+	}
 	h.mu.Unlock()
 	h.save()
 	h.each(func(v *View) { v.settingsChanged() })
@@ -425,7 +438,7 @@ func (h *Hub) save() {
 	h.saveMu.Lock()
 	defer h.saveMu.Unlock()
 	h.mu.Lock()
-	s := saved{Settings: h.settings}
+	s := saved{Settings: h.settings, UIStarts: h.uiStarts}
 	agents := append([]*Agent(nil), h.agents...)
 	done := maps.Clone(h.doneGoals)
 	h.mu.Unlock()

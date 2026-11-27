@@ -273,6 +273,29 @@ appears in Settings.
 Dispatcher model in Settings picks Default or one of the Claude models. It is
 kept across restarts and takes effect on the dispatcher's next turn.
 
+### Interfaces
+
+Ask the dispatcher to change how the window is laid out or what it shows,
+such as a denser board or a rail row with each session's cost, and it saves
+a named interface and switches to it. An interface can replace the title
+bar, the board, each session's tile, each session's row in the side rail,
+and what shows when there are no sessions. Anything it leaves out stays as
+it was. The dispatcher command bar, an open conversation, permission
+prompts, dialogs, Settings, the command palette and the menus always stay
+the same.
+
+An interface reads the same session details the dispatcher sees and can
+only use Switchboard's own actions, such as opening a session or answering a
+prompt. It cannot read files, run commands or reach the network. If part of
+it fails to draw, that part shows the default with a short notice.
+
+Interface in Settings picks Default or a saved interface, and Use default
+interface in the command palette switches back. To start once with Default
+without changing the saved choice, run `switchboard -default-ui` or hold
+Shift while Switchboard starts. If Switchboard quits within ten seconds of
+starting with an interface on, twice in a row, it switches to Default and
+tells the dispatcher. The interface stays saved.
+
 ### Where things are stored
 
 | | macOS | Linux | Windows |

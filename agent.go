@@ -94,6 +94,7 @@ type Entry struct {
 	End    time.Time
 	Widget *Widget
 	Answer *WidgetAnswer
+	Images []Image
 }
 
 type Option struct {
@@ -124,6 +125,7 @@ type Queued struct {
 	Text    string
 	From    string
 	Editing bool
+	Images  []Image
 }
 
 type Meta struct {
@@ -148,7 +150,7 @@ type Meta struct {
 
 type driver interface {
 	launch(a *Agent) (*proc, error)
-	send(a *Agent, text string) error
+	send(a *Agent, text string, imgs []Image) error
 	interrupt(a *Agent)
 	answer(a *Agent, p *Pending, allow, always bool, answers map[string]string, reason string)
 	setMode(a *Agent, mode string)
@@ -374,9 +376,11 @@ func (a *Agent) Send(text string) { a.SendFrom(text, "") }
 
 func (a *Agent) busy() bool { return a.State == Working || a.State == Starting }
 
-func (a *Agent) enqueue(text, from string) {
+func (a *Agent) enqueue(text, from string) { a.enqueueWith(text, from, nil) }
+
+func (a *Agent) enqueueWith(text, from string, imgs []Image) {
 	a.queueID++
-	a.queue = append(a.queue, Queued{ID: a.queueID, Text: text, From: from})
+	a.queue = append(a.queue, Queued{ID: a.queueID, Text: text, From: from, Images: imgs})
 }
 
 func (a *Agent) Queue(text, from string) bool {
@@ -437,7 +441,7 @@ func (a *Agent) EndEdit(id int, text string, save bool) {
 	if a.editing == id {
 		a.editing = 0
 	}
-	if save && text == "" {
+	if save && text == "" && !slices.ContainsFunc(a.queue, func(q Queued) bool { return q.ID == id && len(q.Images) > 0 }) {
 		a.dropQueued(id)
 	}
 	for i := range a.queue {
@@ -450,11 +454,13 @@ func (a *Agent) EndEdit(id int, text string, save bool) {
 	a.flush()
 }
 
-func (a *Agent) SendNow(text string) {
+func (a *Agent) SendNow(text string) { a.SendNowImages(text, nil) }
+
+func (a *Agent) SendNowImages(text string, imgs []Image) {
 	text = strings.TrimSpace(text)
 	a.mu.Lock()
-	if text != "" {
-		a.enqueue(text, "")
+	if text != "" || len(imgs) > 0 {
+		a.enqueueWith(text, "", imgs)
 	}
 	a.editing = 0
 	live := a.busy() && a.p != nil
@@ -476,34 +482,44 @@ func (a *Agent) flush() {
 	}
 }
 
-func (a *Agent) SendFrom(text, from string) {
+func (a *Agent) SendFrom(text, from string) { a.deliver(text, from, nil) }
+
+func (a *Agent) SendImages(text string, imgs []Image) { a.deliver(text, "", imgs) }
+
+func (a *Agent) deliver(text, from string, imgs []Image) {
 	text = strings.TrimSpace(text)
+	has := text != "" || len(imgs) > 0
 	a.mu.Lock()
 	if a.busy() || a.editing != 0 {
-		if text != "" {
-			a.enqueue(text, from)
+		if has {
+			a.enqueueWith(text, from, imgs)
 		}
 		a.mu.Unlock()
-		if text != "" {
+		if has {
 			a.changed()
 		}
 		return
 	}
-	var texts, said []string
-	for _, q := range a.queue {
-		texts = append(texts, q.Text)
-		if q.From != "widget" {
-			said = append(said, q.Text)
-		}
-	}
+	msgs := a.queue
 	a.queue = nil
-	if text != "" {
-		texts = append(texts, text)
-		said = append(said, text)
+	if has {
+		msgs = append(msgs, Queued{Text: text, From: from, Images: imgs})
 	}
-	if len(texts) == 0 {
+	if len(msgs) == 0 {
 		a.mu.Unlock()
 		return
+	}
+	var texts []string
+	var said []Queued
+	var sendImgs []Image
+	for _, q := range msgs {
+		if q.Text != "" {
+			texts = append(texts, q.Text)
+		}
+		sendImgs = append(sendImgs, q.Images...)
+		if q.From != "widget" {
+			said = append(said, q)
+		}
 	}
 	var old *proc
 	if a.p != nil && a.procModel != a.Meta.Model && a.State != NeedsYou && !a.hasBackground() {
@@ -524,8 +540,8 @@ func (a *Agent) SendFrom(text, from string) {
 	}
 	declined := a.Pending
 	a.Pending = nil
-	for _, t := range said {
-		a.addEntry(Entry{Kind: EntryUser, Text: t})
+	for _, q := range said {
+		a.addEntry(Entry{Kind: EntryUser, Text: q.Text, Images: q.Images})
 	}
 	a.Activity = "Starting"
 	a.TurnFrom = time.Now()
@@ -570,7 +586,7 @@ func (a *Agent) SendFrom(text, from string) {
 	a.station = "Think"
 	a.mu.Unlock()
 	a.changed()
-	if err := a.drv.send(a, send); err != nil {
+	if err := a.drv.send(a, send, sendImgs); err != nil {
 		a.fail(err)
 	}
 }

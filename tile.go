@@ -386,7 +386,7 @@ func previewRaw(es []Entry) string {
 		case EntryAssistant:
 			return lastLines(plain(es[i].Text), 3)
 		case EntryUser:
-			return "You: " + lastLines(es[i].Text, 3)
+			return "You: " + lastLines(userLine(es[i]), 3)
 		case EntryError:
 			return lastLines(es[i].Text, 3)
 		}
@@ -430,7 +430,7 @@ func retry(a *Agent) {
 	s := a.Snapshot()
 	for i := len(s.Entries) - 1; i >= 0; i-- {
 		if s.Entries[i].Kind == EntryUser {
-			a.Send(s.Entries[i].Text)
+			a.SendImages(s.Entries[i].Text, s.Entries[i].Images)
 			return
 		}
 	}

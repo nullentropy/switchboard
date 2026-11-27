@@ -46,6 +46,7 @@ type View struct {
 	console                    *caution.Node
 	dDot, dLine, dActions, cmd *caution.Node
 	dOpen                      *caution.Node
+	cmdTray                    *tray
 	dStatus                    *caution.Node
 	tiles                      map[*Agent]*tile
 	order, shown               []*Agent
@@ -70,6 +71,13 @@ type View struct {
 	dState0                    State
 	lastPick                   time.Time
 	lastPickX, lastPickY       float64
+	ui                         *uiMount
+	uiCur                      map[string]any
+	uiLimits                   map[string]Limits
+	uiBar, uiPark, rule        *caution.Node
+	headBrand, headRight       *caution.Node
+	emptyGo                    *caution.Node
+	uiHeadOn                   bool
 }
 
 func mountView(hub *Hub, native bool) func(s *caution.Session) *caution.Node {
@@ -173,24 +181,26 @@ func (v *View) build() *caution.Node {
 	v.statsRow = caution.HStack().Gap(12).Align("center").Anchor(caution.A{Left: px(210 + inset), CenterY: px(0)}).Kids(
 		v.stat("need", "Need you"), v.stat("work", "Working"), v.stat("done", "Done"), v.stat("spent", "Spent"),
 	)
-	v.header = caution.Panel().Dock("top").H(v.headerH(false)).Bg("$titlebar").WindowDrag().Kids(
-		caution.HStack().Gap(9).Align("center").Anchor(caution.A{Left: px(20 + inset), CenterY: px(0)}).Kids(
-			icon(icLayers, 18, "$accent"),
-			caution.Label("Switchboard").FontSize(15).Weight(650),
-		),
-		v.statsRow,
-		caution.HStack().Gap(8).Align("center").Anchor(caution.A{Right: px(16), CenterY: px(0)}).Kids(
-			v.updateBox,
-			v.limitsBox,
-			v.projBox,
-			caution.Button("New session  "+modLabel+"N").Primary().Tip("Or double-click empty space").OnClick(v.openNew),
-		),
+	v.headBrand = caution.HStack().Gap(9).Align("center").Anchor(caution.A{Left: px(20 + inset), CenterY: px(0)}).Kids(
+		icon(icLayers, 18, "$accent"),
+		caution.Label("Switchboard").FontSize(15).Weight(650),
 	)
-	rule := caution.Panel().Dock("top").H(1).Bg("$edgeSoft")
+	v.headRight = caution.HStack().Gap(8).Align("center").Anchor(caution.A{Right: px(16), CenterY: px(0)}).Kids(
+		v.updateBox,
+		v.limitsBox,
+		v.projBox,
+		caution.Button("New session  "+modLabel+"N").Primary().Tip("Or double-click empty space").OnClick(v.openNew),
+	)
+	v.header = caution.Panel().Dock("top").H(v.headerH(false)).Bg("$titlebar").WindowDrag().Kids(v.headBrand, v.statsRow, v.headRight)
+	v.rule = caution.Panel().Dock("top").H(1).Bg("$edgeSoft")
+	v.uiBar = caution.Panel().Dock("top").H(0).Bg("$bg")
+	v.uiPark = caution.Panel()
+	v.loadUI()
 
 	v.cols = colsFor(s.Viewport())
 	v.wall = caution.Scroll().Anchor(fill()).Kids(v.buildBoard())
-	v.empty = v.buildEmpty()
+	v.emptyGo = v.buildEmpty()
+	v.empty = v.emptyGo
 
 	floor := caution.Glass().Anchor(fill()).OnPick(func(x, y float64, _ *caution.Node) {
 		now := time.Now()
@@ -205,7 +215,9 @@ func (v *View) build() *caution.Node {
 	v.field = caution.Panel().Kids(floor, v.wall)
 
 	v.console = v.buildConsole()
-	v.area = caution.DockPanel().Anchor(fill()).Kids(v.console, v.field)
+	v.cmdTray = newTray(v, "$titlebar")
+	v.area = caution.DockPanel().Anchor(fill()).Kids(v.console, v.cmdTray.box, v.field)
+	s.OnFileDrop(v.dropFiles)
 	v.body = caution.Panel().Bg("$bg").Kids(v.area)
 
 	for _, a := range v.hub.Agents() {
@@ -218,6 +230,9 @@ func (v *View) build() *caution.Node {
 
 	s.OnResize(func(w, h float64) {
 		v.fitConsole(w, h)
+		if len(v.goals.Children()) > 0 {
+			v.layoutGoals()
+		}
 		if c := colsFor(w, h); c != v.cols {
 			v.cols = c
 			for _, sec := range v.sections {
@@ -232,7 +247,8 @@ func (v *View) build() *caution.Node {
 		}
 	})
 
-	v.root = caution.DockPanel().Kids(v.header, rule, v.body)
+	v.root = caution.DockPanel().Kids(v.header, v.uiBar, v.rule, v.body)
+	v.refreshUI()
 	return v.root
 }
 
@@ -272,13 +288,14 @@ func (v *View) buildConsole() *caution.Node {
 	if v.s != nil {
 		v.fitConsole(v.s.Viewport())
 	}
-	v.cmd = caution.TextField("").Placeholder("Ask the dispatcher to start, steer or report on sessions, or to run a goal as a swarm")
+	v.cmd = caution.Textarea("").Rows(1).EnterSends().Placeholder("Ask the dispatcher to start, steer or report on sessions, or to run a goal as a swarm")
 	v.cmd.OnSubmit(func(text string) {
-		if strings.TrimSpace(text) == "" {
+		if strings.TrimSpace(text) == "" && len(v.cmdTray.imgs) == 0 {
 			return
 		}
 		v.cmd.ClearValue()
-		go d.Send(text)
+		imgs := v.cmdTray.take()
+		go d.SendImages(text, imgs)
 	})
 	return caution.Panel().Dock("bottom").H(consoleH).Bg("$titlebar").Clips().Kids(
 		caution.Panel().H(1).Bg("$edgeSoft").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)}),
@@ -422,6 +439,7 @@ func (v *View) agentAdded(a *Agent) {
 			v.syncEmpty()
 			v.refreshSummary()
 		}
+		v.refreshUI()
 	})
 }
 
@@ -431,6 +449,7 @@ func (v *View) agentRemoved(a *Agent) {
 			v.syncEmpty()
 			v.refreshSummary()
 		}
+		v.refreshUI()
 	})
 }
 
@@ -474,6 +493,7 @@ func (v *View) agentChanged(a *Agent) {
 			}
 		}
 		v.refreshSummary()
+		v.refreshUI()
 	})
 }
 
@@ -498,7 +518,7 @@ func (v *View) cue(_ *Agent, k cueKind) {
 	if k != cueNeedsYou {
 		return
 	}
-	v.s.Update(func() { v.play(soundNeed) })
+	v.s.Update(func() { v.play(soundNeed); v.refreshUI() })
 }
 
 func (v *View) settingsChanged() {
@@ -520,6 +540,11 @@ func (v *View) settingsChanged() {
 				v.focus.restyle()
 				v.focus.activityFX.retint(set)
 			}
+		}
+		if v.loadUI() {
+			v.applyUI()
+		} else {
+			v.refreshUI()
 		}
 	})
 }
@@ -565,6 +590,9 @@ func (v *View) tick() {
 	}
 	if v.focus != nil {
 		v.focus.tickClock()
+	}
+	if v.ui != nil && (v.limitsMoved() || v.ui.tick) {
+		v.refreshUI()
 	}
 }
 
@@ -790,12 +818,22 @@ func (v *View) openSettings() {
 	upd := caution.Checkbox("Update automatically", !set.UpdatesOff).OnToggle(func(b bool) {
 		v.hub.UpdateSettings(func(s *Settings) { s.UpdatesOff = !b })
 	})
+	uiNames := append([]string{uiDefaultName}, v.uiNames()...)
+	curUI, _ := v.hub.ActiveUI()
+	pickUI := caution.Select(uiNames, max(0, indexOf(uiNames, curUI))).Tip("The interface every window shows").OnSelect(func(i int) {
+		name := ""
+		if i > 0 {
+			name = uiNames[i]
+		}
+		v.useUI(name)
+	})
 	lbl := func(s string) *caution.Node { return caution.Label(s).FontSize(13).Color("$inkDim") }
 	spr, sprH := v.spriteChecks(set)
-	d := caution.Dialog("Settings").CardSize(480, 288+sprH).Kids(
+	d := caution.Dialog("Settings").CardSize(480, 332+sprH).Kids(
 		caution.Grid([]caution.GridCol{{Px: 120}, {Weight: 1, Align: "stretch"}}).ColGap(12).RowGap(12).
 			Anchor(caution.A{Left: px(20), Right: px(20), Top: px(18)}).Kids(
 			lbl("Theme"), theme,
+			lbl("Interface"), pickUI,
 			lbl("Sound"), snd,
 			lbl("Dispatcher model"), dmodel,
 			lbl("Updates"), upd,
@@ -819,7 +857,12 @@ func expandHome(p string) string {
 	return filepath.Clean(p)
 }
 
-func (v *View) updateChanged() { v.s.Update(v.drawUpdate) }
+func (v *View) updateChanged() {
+	v.s.Update(func() {
+		v.drawUpdate()
+		v.refreshUI()
+	})
+}
 
 func (v *View) drawUpdate() {
 	v.updateBox.Clear()

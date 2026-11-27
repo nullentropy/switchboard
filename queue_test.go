@@ -11,6 +11,7 @@ import (
 type stubDriver struct {
 	mu         sync.Mutex
 	sent       []string
+	imgs       [][]Image
 	interrupts int
 }
 
@@ -18,9 +19,10 @@ func (d *stubDriver) launch(a *Agent) (*proc, error) {
 	return &proc{stderr: &tailBuf{max: 4096}, done: make(chan struct{})}, nil
 }
 
-func (d *stubDriver) send(a *Agent, text string) error {
+func (d *stubDriver) send(a *Agent, text string, imgs []Image) error {
 	d.mu.Lock()
 	d.sent = append(d.sent, text)
+	d.imgs = append(d.imgs, imgs)
 	d.mu.Unlock()
 	return nil
 }

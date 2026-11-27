@@ -193,3 +193,73 @@ func TestTheBoardRebuildsOnlyWhenAGoalSessionChangesWhatItShows(t *testing.T) {
 		t.Fatalf("the board rebuilt %d times for a state change and a rename", rebuilds)
 	}
 }
+
+var hitchhikerGoals = []string{
+	"Find the Question", "Steal the Heart of Gold", "Build Earth", "Rescue the Mice", "Calm Marvin",
+	"Translate Babel Fish", "Escape the Vogons", "Visit Milliways", "Restore Magrathea", "Dodge the Bistromath",
+	"Find a Towel", "Read Vogon Poetry",
+}
+
+func TestOpenGoalsFitOnTwoRowsAt1440Wide(t *testing.T) {
+	for _, n := range []int{1, 5, 12} {
+		h := newHub(map[string]string{}, "")
+		v := &View{hub: h, tiles: map[*Agent]*tile{}, body: caution.Panel()}
+		v.buildBoard()
+		for i, g := range hitchhikerGoals[:n] {
+			a := wallSession(t, h, Meta{Title: fmt.Sprintf("Arthur %d", i), Cwd: t.TempDir(), Goal: g})
+			if i == 0 {
+				a.State = NeedsYou
+			}
+			v.addTile(a)
+			v.addTile(wallSession(t, h, Meta{Title: fmt.Sprintf("Ford %d", i), Cwd: t.TempDir(), Goal: g}))
+		}
+		v.layoutBoard()
+		rows, chips := v.goals.Children(), 0
+		for _, r := range rows {
+			chips += len(r.Children())
+		}
+		if chips != n {
+			t.Fatalf("%d goals drew %d chips", n, chips)
+		}
+		if want := map[int]int{1: 1, 5: 1, 12: 2}[n]; len(rows) > want {
+			t.Fatalf("%d goals took %d rows", n, len(rows))
+		}
+	}
+}
+
+func TestTheDoneGoalsChipShowsDoneGoalsAsChipsAfterTheOpenOnes(t *testing.T) {
+	h := newHub(map[string]string{}, filepath.Join(t.TempDir(), "state.json"))
+	v := &View{hub: h, tiles: map[*Agent]*tile{}, body: caution.Panel()}
+	v.buildBoard()
+	for _, g := range hitchhikerGoals[:3] {
+		v.addTile(wallSession(t, h, Meta{Title: g, Cwd: t.TempDir(), Goal: g}))
+	}
+	h.SetGoalDone("Build Earth", true, false)
+	h.SetGoalDone("Find the Question", true, false)
+	count := func() int {
+		v.layoutBoard()
+		n := 0
+		for _, r := range v.goals.Children() {
+			n += len(r.Children())
+		}
+		return n
+	}
+	if n := count(); n != 2 {
+		t.Fatalf("with done goals hidden: %d chips, want the open goal and the toggle", n)
+	}
+	v.showDone = true
+	if n := count(); n != 4 {
+		t.Fatalf("with done goals shown: %d chips", n)
+	}
+}
+
+func TestChipsWrapWhenTheNextOneDoesNotFit(t *testing.T) {
+	got := wrapChips([]float64{100, 100, 100, 250, 40}, 320, 8)
+	want := [][2]int{{0, 3}, {3, 5}}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("rows %v, want %v", got, want)
+	}
+	if got := wrapChips([]float64{500}, 320, 8); fmt.Sprint(got) != "[[0 1]]" {
+		t.Fatalf("an oversized chip: %v", got)
+	}
+}

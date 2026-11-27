@@ -24,6 +24,7 @@ A session is named by its id, the start of its id, or its title.
 You cannot approve permission prompts. When a session needs the user, say which one and what it is asking.
 When the user asks to change how Switchboard looks, use get_theme to see the colour tokens, then save_theme with a name and the colours. Keep text readable against its background.
 When the user asks for a new busy animation, use get_sprite to see the grid, the palette and example frames, then save_sprite with a name and the frames. delete_sprite removes one the user no longer wants.
+When the user asks to change how Switchboard's interface is laid out or what it shows, use get_ui to see the format, the slots, the data and the actions, then save_ui with a name and the slots. save_ui returns any errors; fix them and save again. To go back, use use_ui with Default.
 The user's machine has limited CPU and memory, and sessions that compile or run tests can make it unresponsive. Before starting more than one session, check system_load and start only as many as it has room for: when it is busy, start one, and start the rest as earlier ones finish. Switchboard also tells you, in a [switchboard] message, when the machine becomes overloaded and when it recovers. When it is overloaded, start nothing new. If it stays overloaded, interrupt the busiest session that is building or testing and send it a message to wait. When it recovers, tell the sessions you held back to continue, and start the ones you deferred. Tell the user in one sentence when you hold work back for load.
 When you start several sessions in one repository, each one after the first gets its own git worktree and branch unless you set worktree.
 When the user asks to clear finished sessions off the wall, stop each one with stop_session and then remove it with remove_session. remove_session refuses a session whose worktree still has uncommitted changes or unmerged commits; tell the user which ones and what is left.
@@ -171,7 +172,7 @@ func (m *mcpServer) dispatch(session *Agent, req rpcReq) (any, error) {
 		if session != nil {
 			return map[string]any{"tools": []map[string]any{widgetToolDef}}, nil
 		}
-		return map[string]any{"tools": append(append(append(append([]map[string]any(nil), toolDefs...), themeToolDefs...), spriteToolDefs...), widgetToolDef)}, nil
+		return map[string]any{"tools": append(append(append(append(append([]map[string]any(nil), toolDefs...), themeToolDefs...), spriteToolDefs...), uiToolDefs...), widgetToolDef)}, nil
 	case "tools/call":
 		var p struct {
 			Name      string         `json:"name"`
@@ -331,7 +332,7 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 		for _, e := range es {
 			switch e.Kind {
 			case EntryUser:
-				fmt.Fprintf(&b, "\nUser: %s\n", e.Text)
+				fmt.Fprintf(&b, "\nUser: %s\n", userLine(e))
 			case EntryAssistant:
 				fmt.Fprintf(&b, "\nClaude: %s\n", e.Text)
 			case EntryTool:
@@ -447,6 +448,8 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 		return m.themeCall(name, args)
 	case "get_sprite", "save_sprite", "delete_sprite":
 		return m.spriteCall(name, args)
+	case "get_ui", "save_ui", "use_ui", "delete_ui":
+		return m.uiCall(name, args)
 	case "stop_session":
 		a, err := m.find(str("session"))
 		if err != nil {

@@ -72,6 +72,25 @@ func (v *View) layoutRail() {
 		v.railList.Add(caution.Panel().H(4))
 	}
 	list, head := v.railOrder()
+	var scripted map[*Agent]*caution.Node
+	if v.uiSlot("railRow") != nil {
+		scripted = map[*Agent]*caution.Node{}
+		data, first := v.uiNow(), ""
+		for _, a := range list {
+			out, err := v.uiRenderSession("railRow", data, a)
+			if err != nil {
+				if first == "" {
+					first = err.Error()
+				}
+				continue
+			}
+			scripted[a] = out
+		}
+		if first != "" {
+			v.railList.Add(uiNotice(v.ui.name, "railRow", first))
+			v.railList.Add(caution.Panel().H(4))
+		}
+	}
 	cur := ""
 	for _, a := range list {
 		if p := projectOf(v.tiles[a].snap.Meta); head && p != cur {
@@ -81,6 +100,10 @@ func (v *View) layoutRail() {
 					icon(icFolder, 12, "$inkFaint"),
 					caution.Label(p).FontSize(11).Weight(650).Color("$inkFaint"),
 				)))
+		}
+		if n := scripted[a]; n != nil {
+			v.railList.Add(n)
+			continue
 		}
 		r := v.rows[a]
 		if r == nil {

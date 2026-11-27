@@ -46,8 +46,8 @@ func (claudeDriver) launch(a *Agent) (*proc, error) {
 	return p, err
 }
 
-func (claudeDriver) send(a *Agent, text string) error {
-	return a.proc().writeJSON(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}})
+func (claudeDriver) send(a *Agent, text string, imgs []Image) error {
+	return a.proc().writeJSON(claudeUserMessage(text, imgs))
 }
 
 func claudeControl(a *Agent, req map[string]any) {
@@ -431,6 +431,10 @@ func (claudeDriver) history(a *Agent) {
 				if t = a.replayWidgetReplies(t); t != "" && !strings.HasPrefix(t, "<") {
 					a.addEntry(Entry{Kind: EntryUser, Text: t})
 				}
+				continue
+			}
+			if e, ok := claudeReplayUser(msg["content"]); ok {
+				a.addEntry(e)
 				continue
 			}
 			claudeApply(a, nil, m)

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -101,5 +102,52 @@ func TestRemovingAWorktreeSessionDropsACleanWorktreeAndRefusesOneWithWork(t *tes
 	}
 	if refsOf(cm.ID) != "" {
 		t.Fatal("the checkpoint refs are still there")
+	}
+}
+
+func TestTheDispatcherAloneListsAndCallsTheInterfaceTools(t *testing.T) {
+	w, m := uiToolsFixture(t)
+	m.base, m.disp, m.tokens, m.byAgent = "http://x/mcp/", "disp", map[string]*Agent{}, map[*Agent]string{}
+	w.h.mcp = m
+	session := strings.TrimPrefix(m.sessionURL(w.arthur), "http://x")
+	uiTools := []string{"get_ui", "save_ui", "use_ui", "delete_ui"}
+
+	disp := toolNames(rpc(t, m, "/mcp/disp", "tools/list", nil))
+	for _, n := range uiTools {
+		if !slices.Contains(disp, n) {
+			t.Fatalf("the dispatcher's server lists %q, without %s", disp, n)
+		}
+		if got := toolNames(rpc(t, m, session, "tools/list", nil)); slices.Contains(got, n) {
+			t.Fatalf("a session's server lists %s", n)
+		}
+	}
+
+	call := func(path, name string, args map[string]any) (string, bool) {
+		t.Helper()
+		res, _ := rpc(t, m, path, "tools/call", map[string]any{"name": name, "arguments": args})["result"].(map[string]any)
+		content, _ := res["content"].([]any)
+		text, _ := content[0].(map[string]any)["text"].(string)
+		return text, res["isError"] == true
+	}
+
+	if text, bad := call("/mcp/disp", "save_ui", map[string]any{"interface": uiNamed("Earth")}); bad || w.h.Settings().Interface != "Earth" {
+		t.Fatalf("save_ui: %q", text)
+	}
+	if text, bad := call("/mcp/disp", "get_ui", map[string]any{"name": "Earth"}); bad || !strings.Contains(text, "Don't Panic") {
+		t.Fatalf("get_ui: %q", text)
+	}
+	if text, bad := call("/mcp/disp", "use_ui", map[string]any{"name": "Default"}); bad || w.h.Settings().Interface != "" {
+		t.Fatalf("use_ui: %q", text)
+	}
+	if text, bad := call("/mcp/disp", "delete_ui", map[string]any{"name": "Earth"}); bad || len(w.h.Settings().Interfaces) != 0 {
+		t.Fatalf("delete_ui: %q", text)
+	}
+	for _, n := range uiTools {
+		if _, bad := call(session, n, map[string]any{"name": "Earth", "interface": uiNamed("Earth")}); !bad {
+			t.Fatalf("a session called %s", n)
+		}
+	}
+	if len(w.h.Settings().Interfaces) != 0 {
+		t.Fatal("a session's call saved an interface")
 	}
 }

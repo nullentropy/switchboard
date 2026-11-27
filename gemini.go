@@ -112,16 +112,14 @@ func (d *geminiDriver) launch(a *Agent) (*proc, error) {
 	return p, nil
 }
 
-func (d *geminiDriver) send(a *Agent, text string) error {
+func (d *geminiDriver) send(a *Agent, text string, imgs []Image) error {
 	a.mu.Lock()
 	session, p := a.Meta.Thread, a.p
 	a.mu.Unlock()
-	if strings.HasPrefix(text, "/") || strings.HasPrefix(text, "$") {
-		text = " " + text
-	}
+	prompt := geminiPrompt(text, imgs)
 	go func() {
 		raw, err := p.call("session/prompt", map[string]any{"sessionId": session,
-			"prompt": []any{map[string]any{"type": "text", "text": text}}}, 24*time.Hour)
+			"prompt": prompt}, 24*time.Hour)
 		var res struct {
 			StopReason string `json:"stopReason"`
 		}
@@ -282,7 +280,9 @@ func (d *geminiDriver) update(a *Agent, up map[string]any) bool {
 	case "user_message_chunk":
 		if d.loading {
 			d.flush(a)
-			a.addEntry(Entry{Kind: EntryUser, Text: text()})
+			if e, ok := geminiReplayUser(up["content"]); ok {
+				a.addEntry(e)
+			}
 		}
 		return false
 	case "agent_message_chunk":
