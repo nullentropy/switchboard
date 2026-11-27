@@ -19,23 +19,30 @@ Each agent uses its own login, settings and instruction files.
 
 Linux:
 
-- An X11 or XWayland desktop with OpenGL, and the ALSA library. On Debian
-  and Ubuntu these come from `libgl1`, `libx11-6` and `libasound2`.
+- An X11 or XWayland desktop, a Vulkan 1.3 driver with push descriptors
+  (`VK_KHR_push_descriptor` or Vulkan 1.4), and the ALSA library. On Debian
+  and Ubuntu these come from `libx11-6`, `libvulkan1`, a Vulkan driver such
+  as `mesa-vulkan-drivers`, and `libasound2`.
 
 Windows:
 
 - `claude` from the native installer, so that `claude.exe` is on your
   `PATH`. The npm package installs `claude.cmd`, which cannot pass the
   dispatcher its instructions.
+- Direct3D 11 at feature level 11_0 or higher, and `d3dcompiler_47.dll`.
+  Without a GPU that supports it, Switchboard draws with the WARP software
+  renderer.
 
 To build from source:
 
 - Go 1.26 or newer. The version comes from `go.mod`.
-- A C compiler. On macOS, the Xcode Command Line Tools, which also provide
-  `codesign` and `lipo`. On Debian and Ubuntu, `gcc`, `pkg-config`,
-  `libgl1-mesa-dev`, `libx11-dev`, `libxcursor-dev`, `libxi-dev`,
-  `libxinerama-dev`, `libxrandr-dev`, `libxxf86vm-dev` and
-  `libasound2-dev`. On Windows, a MinGW-w64 `gcc` on your `PATH`.
+- A C and C++ compiler. On macOS, the Xcode Command Line Tools, which also
+  provide `codesign` and `lipo`. On Debian and Ubuntu, `gcc`, `g++`,
+  `pkg-config`, `libvulkan-dev`, `libgl1-mesa-dev`, `libx11-dev`,
+  `libxcursor-dev`, `libxi-dev`, `libxinerama-dev`, `libxrandr-dev`,
+  `libxxf86vm-dev` and `libasound2-dev`. The GLFW window library needs the
+  `libgl1-mesa-dev` headers to compile, and the binary does not link OpenGL.
+  On Windows, MinGW-w64 `gcc` and `g++` on your `PATH`.
 
 ## Install
 

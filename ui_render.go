@@ -463,7 +463,7 @@ func (r *uiRenderer) props(node, holder *caution.Node, n *uiNode, sc *uiScope) e
 		if !uiAligns[s] {
 			return fmt.Errorf("align %q is not start, center, end or stretch", s)
 		}
-		inner.Align(s)
+		inner.Align(caution.Align(s))
 	}
 	for _, k := range []string{"bg", "color", "border"} {
 		if s := strs[k]; s != "" && !uiHex.MatchString(s) && !uiTokRef.MatchString(s) {

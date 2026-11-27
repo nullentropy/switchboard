@@ -669,7 +669,7 @@ var widgetToolDef = func() map[string]any {
 				"submit_label": str("Label of the submit button. Defaults to Submit."),
 			}, "fields"),
 			"shader": obj(map[string]any{
-				"frag": str("GLSL ES 3.00 fragment shader body, up to 16 KB, without #version or precision lines. It must define vec4 effect(vec2 uv), which returns the RGBA color for uv, where uv runs 0 to 1 across the widget with its origin at the top left. " +
+				"frag": str("GLSL fragment shader body, up to 16 KB, without #version or precision lines. The desktop app compiles it as GLSL 4.50 and the browser view as GLSL ES 3.00, so use only what both accept. It must define vec4 effect(vec2 uv), which returns the RGBA color for uv, where uv runs 0 to 1 across the widget with its origin at the top left. " +
 					"Built-in uniforms: float u_time, seconds since the window started, and vec2 u_res, the widget's size in logical pixels. Each name in uniforms is declared for you as uniform float <name>; do not declare it again. " +
 					"No textures or images are available. A shader that fails to compile renders as a blank area and no error is reported back, so keep it simple and check the GLSL yourself."),
 				"uniforms": map[string]any{"type": "object", "additionalProperties": num, "maxProperties": widgetMaxUniform,

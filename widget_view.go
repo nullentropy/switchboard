@@ -103,7 +103,7 @@ func shaderWidget(s *WShader) *caution.Node {
 func tableWidget(t *WTable) *caution.Node {
 	cols := make([]caution.GridCol, len(t.Columns))
 	for i, c := range t.Columns {
-		cols[i] = caution.GridCol{Weight: 1, Align: map[bool]string{true: "end", false: "start"}[c.Align == "right"]}
+		cols[i] = caution.GridCol{Weight: 1, Align: map[bool]caution.Align{true: caution.AlignEnd, false: caution.AlignStart}[c.Align == "right"]}
 	}
 	g := caution.Grid(cols).ColGap(16).RowGap(6)
 	for _, c := range t.Columns {
