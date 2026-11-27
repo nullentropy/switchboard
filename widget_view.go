@@ -90,8 +90,14 @@ func widgetCard(e Entry, answer func(WidgetAnswer)) *caution.Node {
 		card.Add(buttonsWidget(w.Buttons, e.Answer, answer))
 	case "form":
 		card.Add(formWidget(w.Form, e.Answer, answer))
+	case "shader":
+		card.Add(shaderWidget(w.Shader))
 	}
 	return card
+}
+
+func shaderWidget(s *WShader) *caution.Node {
+	return caution.Shader(caution.FX{Frag: s.Frag, Animate: s.Animate, Uniforms: s.Uniforms}).H(s.Height).Radius(4).Clips()
 }
 
 func tableWidget(t *WTable) *caution.Node {

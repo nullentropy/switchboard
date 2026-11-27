@@ -25,6 +25,11 @@ const (
 	widgetMaxOptions = 20
 	widgetMaxTitle   = 120
 	widgetMaxLabel   = 40
+	widgetMaxFrag    = 16 << 10
+	widgetMaxUniform = 16
+	widgetMinShaderH = 40
+	widgetMaxShaderH = 600
+	widgetShaderH    = 200
 )
 
 const widgetTriggers = "Use show_widget on your own, without waiting to be asked. " +
@@ -48,6 +53,7 @@ type Widget struct {
 	Chart    *WChart    `json:"chart,omitempty"`
 	Buttons  *WButtons  `json:"buttons,omitempty"`
 	Form     *WForm     `json:"form,omitempty"`
+	Shader   *WShader   `json:"shader,omitempty"`
 }
 
 type WColumn struct {
@@ -125,6 +131,13 @@ type WForm struct {
 	SubmitLabel string   `json:"submit_label,omitempty"`
 }
 
+type WShader struct {
+	Frag     string             `json:"frag"`
+	Uniforms map[string]float64 `json:"uniforms,omitempty"`
+	Height   float64            `json:"height,omitempty"`
+	Animate  bool               `json:"animate,omitempty"`
+}
+
 type WidgetAnswer struct {
 	Clicked string            `json:"clicked,omitempty"`
 	Values  map[string]string `json:"values,omitempty"`
@@ -133,8 +146,9 @@ type WidgetAnswer struct {
 var (
 	widgetIDRE    = regexp.MustCompile(`^[a-z0-9_-]{1,40}$`)
 	fieldNameRE   = regexp.MustCompile(`^[A-Za-z0-9_]{1,40}$`)
+	uniformNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,39}$`)
 	widgetEventRE = regexp.MustCompile(`(?s)<switchboard-widget id="([a-z0-9_-]{1,40})" kind="([a-z]+)">(.*?)</switchboard-widget>`)
-	widgetKinds   = []string{"table", "progress", "keyvalue", "chart", "buttons", "form"}
+	widgetKinds   = []string{"table", "progress", "keyvalue", "chart", "buttons", "form", "shader"}
 	widgetTones   = []string{"", "neutral", "good", "warn", "bad"}
 )
 
@@ -219,6 +233,38 @@ func (w *Widget) check() error {
 			return missing
 		}
 		return w.Form.check()
+	case "shader":
+		if w.Shader == nil {
+			return missing
+		}
+		return w.Shader.check()
+	}
+	return nil
+}
+
+func (s *WShader) check() error {
+	if strings.TrimSpace(s.Frag) == "" {
+		return fmt.Errorf("shader: frag is empty")
+	}
+	if len(s.Frag) > widgetMaxFrag {
+		return fmt.Errorf("shader: frag is %d bytes; the limit is %d", len(s.Frag), widgetMaxFrag)
+	}
+	if len(s.Uniforms) > widgetMaxUniform {
+		return fmt.Errorf("shader: %d uniforms; the limit is %d", len(s.Uniforms), widgetMaxUniform)
+	}
+	for name := range s.Uniforms {
+		if !uniformNameRE.MatchString(name) {
+			return fmt.Errorf("shader: uniform %q must be a GLSL name of up to 40 letters, digits and _, not starting with a digit", name)
+		}
+		if strings.HasPrefix(name, "u_") || strings.HasPrefix(name, "gl_") {
+			return fmt.Errorf("shader: uniform %q uses a reserved prefix, u_ or gl_", name)
+		}
+	}
+	if s.Height == 0 {
+		s.Height = widgetShaderH
+	}
+	if s.Height < widgetMinShaderH || s.Height > widgetMaxShaderH {
+		return fmt.Errorf("shader: height %v is outside %d to %d", s.Height, widgetMinShaderH, widgetMaxShaderH)
 	}
 	return nil
 }
@@ -577,11 +623,11 @@ var widgetToolDef = func() map[string]any {
 	num := map[string]any{"type": "number"}
 	return map[string]any{
 		"name": widgetTool,
-		"description": "Show a widget in this conversation, in Switchboard's window: a table, progress bars, a keyvalue list, a bar or line chart, a row of buttons, or a short form. " +
+		"description": "Show a widget in this conversation, in Switchboard's window: a table, progress bars, a keyvalue list, a bar or line chart, a row of buttons, a short form, or a fragment shader. " +
 			widgetTriggers + " " +
 			"Text in widgets is plain; markdown and links are not rendered. " +
 			"Returns \"shown <id>\" or \"updated <id>\". Call it again with the same id to replace that widget in place, for example to advance progress bars. " +
-			"Updates to one widget show at most 4 times a second. A conversation holds at most 50 widgets. " +
+			"Updates to one widget show at most 4 times a second, and a shader widget's animate runs on the GPU between updates, so animate it with u_time rather than repeated calls. A conversation holds at most 50 widgets. " +
 			"When the user clicks a button or submits a form, the widget locks and you get a message <switchboard-widget id=\"<id>\" kind=\"buttons\">{\"clicked\":\"<label>\"}</switchboard-widget>, " +
 			"or {\"values\":{\"<field name>\":\"<value>\"}} for a form. An answered widget cannot be changed; show a new one. Fill in only the object named by kind.",
 		"inputSchema": obj(map[string]any{
@@ -622,6 +668,15 @@ var widgetToolDef = func() map[string]any {
 				}, "name", "label", "kind"), widgetMaxFields, "Up to 12 fields."),
 				"submit_label": str("Label of the submit button. Defaults to Submit."),
 			}, "fields"),
+			"shader": obj(map[string]any{
+				"frag": str("GLSL ES 3.00 fragment shader body, up to 16 KB, without #version or precision lines. It must define vec4 effect(vec2 uv), which returns the RGBA color for uv, where uv runs 0 to 1 across the widget with its origin at the top left. " +
+					"Built-in uniforms: float u_time, seconds since the window started, and vec2 u_res, the widget's size in logical pixels. Each name in uniforms is declared for you as uniform float <name>; do not declare it again. " +
+					"No textures or images are available. A shader that fails to compile renders as a blank area and no error is reported back, so keep it simple and check the GLSL yourself."),
+				"uniforms": map[string]any{"type": "object", "additionalProperties": num, "maxProperties": widgetMaxUniform,
+					"description": "Up to 16 float uniforms by name: letters, digits and _, not starting with a digit, u_ or gl_. Update them by calling again with the same id."},
+				"height":  map[string]any{"type": "number", "minimum": widgetMinShaderH, "maximum": widgetMaxShaderH, "description": "Height in logical pixels, 40 to 600. Defaults to 200. The width is the conversation's width."},
+				"animate": map[string]any{"type": "boolean", "description": "Redraw every frame while visible, for shaders that use u_time. Leave out for a still image."},
+			}, "frag"),
 		}, "kind"),
 	}
 }()
