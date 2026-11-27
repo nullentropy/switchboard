@@ -160,7 +160,7 @@ func (v *View) build() *caution.Node {
 	v.bindKeys()
 
 	v.stats = map[string]*caution.Node{}
-	v.projBox = caution.Panel().W(0).H(30)
+	v.projBox = caution.HStack()
 	inset := 0.0
 	if v.native {
 		inset = 72
@@ -183,7 +183,6 @@ func (v *View) build() *caution.Node {
 			v.updateBox,
 			v.limitsBox,
 			v.projBox,
-			caution.Button("Commands  "+modLabel+"K").Tip("Every action and session ("+modLabel+"K)").OnClick(v.openPalette),
 			caution.Button("New session  "+modLabel+"N").Primary().Tip("Or double-click empty space").OnClick(v.openNew),
 		),
 	)

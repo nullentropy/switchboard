@@ -18,7 +18,6 @@ shot() { name=$1; shift; "$bin/term" -url "$url" -shot "$out/$name.png" -w "$w" 
 shot wall -settle 4000
 shot wall-later -settle 20000
 shot new -settle 4500 -clicks "$((w - 90)),30@3200"
-shot settings -settle 4500 -clicks "$((w - 205)),30@3200"
 shot palette -settle 4500 -clicks "$((w - 305)),30@3200"
 shot session-waiting -settle 5000 -clicks "400,215@3200"
 shot session-working -settle 5000 -clicks "250,470@3200"

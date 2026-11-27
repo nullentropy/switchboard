@@ -40,7 +40,6 @@ func (v *View) syncProjects() {
 	v.projNames = names
 	v.projBox.Clear()
 	if len(names) < 2 {
-		v.projBox.W(0)
 		v.projSel = nil
 		return
 	}
@@ -52,7 +51,7 @@ func (v *View) syncProjects() {
 		}
 		v.layoutBoard()
 	})
-	v.projBox.W(170).Add(v.projSel.Anchor(fill()))
+	v.projBox.Add(v.projSel.W(170))
 }
 
 func (v *View) filterProject(name string) {
