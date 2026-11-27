@@ -20,6 +20,7 @@ type Settings struct {
 	Sounds     bool                         `json:"sounds"`
 	Mode       string                       `json:"mode"`
 	Model      string                       `json:"model"`
+	Effort     string                       `json:"effort,omitempty"`
 	Provider   string                       `json:"provider,omitempty"`
 	WindowW    int                          `json:"windowW,omitempty"`
 	WindowH    int                          `json:"windowH,omitempty"`

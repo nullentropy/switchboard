@@ -17,18 +17,23 @@ func (v *View) buildShell() {
 	v.railList = caution.VStack().Gap(2).Pad(8).Align("stretch").
 		Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)})
 	v.rows = map[*Agent]*railRow{}
-	v.holder = caution.Panel()
+	v.holder = caution.Panel().Anchor(fill())
 	split := caution.HSplit().Anchor(fill()).
 		SplitPos(sidebarWidth(float64(v.set.SidebarW))).SplitMin(sidebarMin, mainMin)
 	split.OnSplitResize(func(pos float64) { v.resizeSidebar(split, pos) })
-	v.shell = caution.Panel().Bg("$bg").Anchor(fill()).Kids(
+	// The split's drag gutter between the panes is unpainted, so the shell
+	// shows through it. Painting it as rail and drawing the edge on the main
+	// pane keeps the main pane flush against the edge.
+	v.shell = caution.Panel().Bg("$panelAlt").Anchor(fill()).Kids(
 		caution.Glass().Anchor(fill()).OnPick(func(_, _ float64, _ *caution.Node) {}),
 		split.Kids(
 			caution.Panel().Bg("$panelAlt").Kids(
 				caution.Scroll().NoFade().Anchor(fill()).Kids(v.railList),
-				caution.Panel().Bg("$edgeSoft").Anchor(caution.A{Right: px(0), Top: px(0), Bottom: px(0)}).W(1),
 			),
-			v.holder,
+			caution.Panel().Kids(
+				v.holder,
+				caution.Panel().Bg("$edgeSoft").Anchor(caution.A{Left: px(0), Top: px(0), Bottom: px(0)}).W(1),
+			),
 		),
 	)
 }

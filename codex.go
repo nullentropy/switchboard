@@ -77,6 +77,9 @@ func (d *codexDriver) launch(a *Agent) (*proc, error) {
 	if m.Model != "" {
 		params["model"] = m.Model
 	}
+	if m.Effort != "" {
+		params["config"] = map[string]any{"model_reasoning_effort": m.Effort}
+	}
 	method := "thread/start"
 	if m.Thread != "" {
 		method = "thread/resume"
@@ -93,12 +96,14 @@ func (d *codexDriver) launch(a *Agent) (*proc, error) {
 				Items []map[string]any `json:"items"`
 			} `json:"turns"`
 		} `json:"thread"`
+		Effort string `json:"reasoningEffort"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil || res.Thread.ID == "" {
 		return fail(fmt.Errorf("Codex returned no thread"))
 	}
 	a.mu.Lock()
 	a.Meta.Thread = res.Thread.ID
+	a.effortSeen = res.Effort
 	if len(a.Entries) <= 1 && len(res.Thread.Turns) > 0 {
 		cur := a.Entries
 		a.Entries = nil
@@ -119,15 +124,18 @@ func (d *codexDriver) launch(a *Agent) (*proc, error) {
 
 func (d *codexDriver) send(a *Agent, text string, imgs []Image) error {
 	a.mu.Lock()
-	thread, mode, p := a.Meta.Thread, a.Meta.Mode, a.p
+	thread, mode, effort, p := a.Meta.Thread, a.Meta.Mode, a.Meta.Effort, a.p
 	a.mu.Unlock()
 	approval, _, sandbox := codexPolicy(mode)
 	input, err := codexInput(text, imgs, imageDir())
 	if err != nil {
 		return err
 	}
-	raw, err := p.call("turn/start", map[string]any{"threadId": thread, "approvalPolicy": approval, "sandboxPolicy": sandbox,
-		"input": input}, 60*time.Second)
+	params := map[string]any{"threadId": thread, "approvalPolicy": approval, "sandboxPolicy": sandbox, "input": input}
+	if effort != "" {
+		params["effort"] = effort
+	}
+	raw, err := p.call("turn/start", params, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -140,6 +148,9 @@ func (d *codexDriver) send(a *Agent, text string, imgs []Image) error {
 	a.mu.Lock()
 	if a.turn == "" && a.State != Ready {
 		a.turn = res.Turn.ID
+	}
+	if effort != "" {
+		a.effortSeen = effort
 	}
 	a.mu.Unlock()
 	return nil
@@ -155,6 +166,9 @@ func (d *codexDriver) interrupt(a *Agent) {
 }
 
 func (d *codexDriver) setMode(a *Agent, mode string) {}
+
+// turn/start carries Meta.Effort, and codex keeps it for later turns.
+func (d *codexDriver) setEffort(a *Agent, effort string) {}
 
 func (d *codexDriver) history(a *Agent) {}
 

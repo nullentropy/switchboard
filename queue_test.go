@@ -36,6 +36,7 @@ func (d *stubDriver) interrupt(a *Agent) {
 
 func (d *stubDriver) answer(*Agent, *Pending, bool, bool, map[string]string, string) {}
 func (d *stubDriver) setMode(*Agent, string)                                         {}
+func (d *stubDriver) setEffort(*Agent, string)                                       {}
 func (d *stubDriver) history(*Agent)                                                 {}
 
 func (d *stubDriver) delivered() []string {

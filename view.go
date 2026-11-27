@@ -637,7 +637,7 @@ func (v *View) openNew() {
 	} else {
 		cwd, _ = os.Getwd()
 	}
-	model, mode, provider := set.Model, set.Mode, set.Provider
+	model, effort, mode, provider := set.Model, set.Effort, set.Mode, set.Provider
 	if mode == "" {
 		mode = "default"
 	}
@@ -651,6 +651,27 @@ func (v *View) openNew() {
 	for i, p := range providers {
 		labels[i] = providerName(p)
 	}
+	effortBox := caution.Panel().H(32)
+	pickEffort := func() {
+		effortBox.Clear()
+		opts := v.hub.efforts(provider, model)
+		if opts == nil {
+			effort = ""
+			effortBox.Add(caution.Label(providerName(provider) + " has no effort setting").FontSize(13).Color("$inkFaint").
+				Anchor(caution.A{Left: px(0), CenterY: px(0)}))
+			return
+		}
+		if !slices.Contains(opts, effort) {
+			effort = ""
+		}
+		names := append([]string{"Default"}, opts...)
+		effortBox.Add(caution.Select(names, max(0, slices.Index(names, effort))).OnSelect(func(i int) {
+			effort = ""
+			if i > 0 {
+				effort = names[i]
+			}
+		}).Anchor(fill()))
+	}
 	modelBox := caution.Panel().H(32)
 	pickModel := func() {
 		names := append([]string{"Default"}, v.hub.models(provider)...)
@@ -662,9 +683,11 @@ func (v *View) openNew() {
 			if i > 0 {
 				model = names[i]
 			}
+			pickEffort()
 		})
 		modelBox.Clear()
 		modelBox.Add(sel.Anchor(fill()))
+		pickEffort()
 	}
 	pickModel()
 	provSel := caution.Select(labels, indexOf(providers, provider)).OnSelect(func(i int) {
@@ -715,8 +738,8 @@ func (v *View) openNew() {
 			errL.SetText(err.Error())
 			return
 		}
-		v.hub.UpdateSettings(func(s *Settings) { s.Model, s.Mode, s.Provider = model, mode, provider })
-		a, err := v.hub.New(Meta{Provider: provider, Title: titleFrom(valueOf(prompt), dir), Cwd: dir, Model: model, Mode: mode, Goal: strings.TrimSpace(valueOf(goalF))}, wt)
+		v.hub.UpdateSettings(func(s *Settings) { s.Model, s.Effort, s.Mode, s.Provider = model, effort, mode, provider })
+		a, err := v.hub.New(Meta{Provider: provider, Title: titleFrom(valueOf(prompt), dir), Cwd: dir, Model: model, Effort: effort, Mode: mode, Goal: strings.TrimSpace(valueOf(goalF))}, wt)
 		if err != nil {
 			errL.SetText(err.Error())
 			return
@@ -738,12 +761,13 @@ func (v *View) openNew() {
 		lbl("Folder"), folderBox,
 		lbl("Agent"), provSel,
 		lbl("Model"), modelBox,
+		lbl("Effort"), effortBox,
 		lbl("Permissions"), modeSel,
 		lbl("Goal"), goalF,
 		lbl("Worktree"), wtBox,
 		lbl("Prompt"), prompt,
 	)
-	d := caution.Dialog("New session").CardSize(560, 470).Kids(
+	d := caution.Dialog("New session").CardSize(560, 512).Kids(
 		form,
 		errL.Anchor(caution.A{Left: px(20), Bottom: px(26)}),
 		caution.HStack().Gap(8).Anchor(caution.A{Right: px(20), Bottom: px(20)}).Kids(

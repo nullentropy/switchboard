@@ -58,17 +58,50 @@ func (f *fakeIO) until(method string) map[string]any {
 	}
 }
 
-func fakeClaude() {
+func fakeRecord(line string) {
 	if path := os.Getenv("SWITCHBOARD_FAKE_ARGS"); path != "" {
 		if fh, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
-			fmt.Fprintln(fh, strings.Join(os.Args[1:], " "))
+			fmt.Fprintln(fh, line)
 			fh.Close()
 		}
 	}
+}
+
+func fakeClaude() {
+	fakeRecord(strings.Join(os.Args[1:], " "))
+	effort := "medium"
+	for i, a := range os.Args {
+		if a == "--effort" && i+1 < len(os.Args) {
+			effort = os.Args[i+1]
+		}
+	}
 	f := newFakeIO()
+	settings := func(m map[string]any) bool {
+		r, _ := m["request"].(map[string]any)
+		if m["type"] != "control_request" {
+			return false
+		}
+		switch r["subtype"] {
+		case "apply_flag_settings":
+			settings, _ := r["settings"].(map[string]any)
+			if e, ok := settings["effortLevel"].(string); ok {
+				effort = e
+			}
+			f.write(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": m["request_id"]}})
+			return true
+		case "get_settings":
+			f.write(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": m["request_id"],
+				"response": map[string]any{"applied": map[string]any{"model": "deep-thought", "effort": effort}}}})
+			return true
+		}
+		return false
+	}
 	f.write(map[string]any{"type": "system", "subtype": "init"})
 	for {
 		m := f.read()
+		if settings(m) {
+			continue
+		}
 		if r, _ := m["request"].(map[string]any); m["type"] == "control_request" && r["subtype"] == "initialize" {
 			f.write(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": m["request_id"],
 				"response": map[string]any{"commands": []any{
@@ -91,6 +124,9 @@ func fakeClaude() {
 		f.write(map[string]any{"type": "control_request", "request_id": "r1", "request": map[string]any{
 			"subtype": "can_use_tool", "tool_name": "Bash", "input": map[string]any{"command": "go test ./..."}}})
 		resp := f.read()
+		for settings(resp) {
+			resp = f.read()
+		}
 		r, _ := resp["response"].(map[string]any)
 		inner, _ := r["response"].(map[string]any)
 		f.write(map[string]any{"type": "assistant", "message": map[string]any{"content": []any{
@@ -108,9 +144,19 @@ func fakeCodex() {
 	reply := func(m map[string]any, result any) { f.write(map[string]any{"id": m["id"], "result": result}) }
 	reply(f.until("initialize"), map[string]any{"userAgent": "fake"})
 	reply(f.until("account/read"), map[string]any{"account": map[string]any{"type": "chatgpt"}, "requiresOpenaiAuth": true})
-	reply(f.until("thread/start"), map[string]any{"thread": map[string]any{"id": "th1"}})
+	start := f.until("thread/start")
+	params, _ := start["params"].(map[string]any)
+	config, _ := params["config"].(map[string]any)
+	effort, _ := config["model_reasoning_effort"].(string)
+	fakeRecord("thread/start model_reasoning_effort=" + effort)
+	if effort == "" {
+		effort = "medium"
+	}
+	reply(start, map[string]any{"thread": map[string]any{"id": "th1"}, "reasoningEffort": effort})
 	for {
 		m := f.until("turn/start")
+		params, _ := m["params"].(map[string]any)
+		fakeRecord(fmt.Sprint("turn/start effort=", params["effort"]))
 		reply(m, map[string]any{"turn": map[string]any{"id": "tu1", "status": "inProgress"}})
 		note := func(method string, params map[string]any) {
 			params["threadId"], params["turnId"] = "th1", "tu1"

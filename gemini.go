@@ -175,6 +175,8 @@ func (d *geminiDriver) setMode(a *Agent, mode string) {
 	}
 }
 
+func (d *geminiDriver) setEffort(a *Agent, effort string) {}
+
 func (d *geminiDriver) history(a *Agent) {}
 
 func (d *geminiDriver) flush(a *Agent) {

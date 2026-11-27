@@ -135,6 +135,7 @@ type Meta struct {
 	Title       string    `json:"title"`
 	Cwd         string    `json:"cwd"`
 	Model       string    `json:"model,omitempty"`
+	Effort      string    `json:"effort,omitempty"`
 	Mode        string    `json:"mode"`
 	Parent      string    `json:"parent,omitempty"`
 	Goal        string    `json:"goal,omitempty"`
@@ -154,6 +155,7 @@ type driver interface {
 	interrupt(a *Agent)
 	answer(a *Agent, p *Pending, allow, always bool, answers map[string]string, reason string)
 	setMode(a *Agent, mode string)
+	setEffort(a *Agent, effort string)
 	history(a *Agent)
 }
 
@@ -178,9 +180,10 @@ type Agent struct {
 
 	extraArgs func() []string
 
-	p         *proc
-	procModel string
-	toolIdx   map[string]int
+	p          *proc
+	procModel  string
+	effortSeen string
+	toolIdx    map[string]int
 
 	costBase, procCost float64
 	ctxUsed, ctxWindow int
@@ -248,22 +251,23 @@ func waitingOn(subs []Sub) string {
 }
 
 type Snapshot struct {
-	Meta      Meta
-	State     State
-	Activity  string
-	Branch    string
-	Entries   []Entry
-	Pending   []*Pending
-	Queued    []Queued
-	Cost      float64
-	TurnFrom  time.Time
-	Err       string
-	Station   string
-	Subs      []Sub
-	Marks     []Mark
-	CtxUsed   int
-	CtxWindow int
-	Cleared   int
+	Meta           Meta
+	State          State
+	Activity       string
+	Branch         string
+	Entries        []Entry
+	Pending        []*Pending
+	Queued         []Queued
+	Cost           float64
+	TurnFrom       time.Time
+	Err            string
+	Station        string
+	Subs           []Sub
+	Marks          []Mark
+	CtxUsed        int
+	CtxWindow      int
+	Cleared        int
+	ReportedEffort string
 }
 
 func newID() string {
@@ -327,7 +331,7 @@ func (a *Agent) Snapshot() Snapshot {
 		Entries: append([]Entry(nil), a.Entries...), Pending: append([]*Pending(nil), a.Pending...),
 		Cost: a.Cost, TurnFrom: a.TurnFrom, Err: a.Err, Station: a.station, Subs: a.subList(),
 		Marks: append([]Mark(nil), a.marks...), CtxUsed: a.ctxUsed, CtxWindow: a.ctxWindow,
-		Cleared: a.cleared, Queued: a.queued(),
+		Cleared: a.cleared, Queued: a.queued(), ReportedEffort: a.effortSeen,
 	}
 }
 
@@ -531,6 +535,7 @@ func (a *Agent) deliver(text, from string, imgs []Image) {
 	if !running {
 		a.stopped = false
 		a.procModel = a.Meta.Model
+		a.effortSeen = ""
 	}
 	a.State = Starting
 	joined := strings.Join(texts, "\n\n")
@@ -833,6 +838,7 @@ func (a *Agent) exited(p *proc, err error) {
 		return
 	}
 	a.p = nil
+	a.effortSeen = ""
 	a.station = ""
 	a.turn = ""
 	a.subs, a.subOrder = nil, nil

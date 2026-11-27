@@ -12,16 +12,26 @@ var staticModels = map[string][]string{
 	"gemini": {"auto", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro"},
 }
 
+type codexModel struct {
+	Model   string
+	Efforts []string
+	Default bool
+}
+
 var (
 	codexModelsMu sync.Mutex
-	codexModels   []string
+	codexModels   []codexModel
 )
 
 func (h *Hub) models(provider string) []string {
 	if provider == "codex" {
 		codexModelsMu.Lock()
 		defer codexModelsMu.Unlock()
-		return codexModels
+		var names []string
+		for _, m := range codexModels {
+			names = append(names, m.Model)
+		}
+		return names
 	}
 	if provider == "" || provider == "claude" {
 		h.mu.Lock()
@@ -81,7 +91,7 @@ func (h *Hub) loadCodexModels() {
 	} {
 		_, _ = in.Write([]byte(l + "\n"))
 	}
-	done := make(chan []string, 1)
+	done := make(chan []codexModel, 1)
 	go func() {
 		sc := bufio.NewScanner(out)
 		sc.Buffer(make([]byte, 0, 1<<20), 16<<20)
@@ -90,26 +100,34 @@ func (h *Hub) loadCodexModels() {
 				ID     json.RawMessage `json:"id"`
 				Result struct {
 					Data []struct {
-						Model string `json:"model"`
+						Model   string `json:"model"`
+						Default bool   `json:"isDefault"`
+						Efforts []struct {
+							Effort string `json:"reasoningEffort"`
+						} `json:"supportedReasoningEfforts"`
 					} `json:"data"`
 				} `json:"result"`
 			}
 			if json.Unmarshal(sc.Bytes(), &m) != nil || string(m.ID) != "2" {
 				continue
 			}
-			var names []string
+			var models []codexModel
 			for _, d := range m.Result.Data {
-				names = append(names, d.Model)
+				cm := codexModel{Model: d.Model, Default: d.Default}
+				for _, e := range d.Efforts {
+					cm.Efforts = append(cm.Efforts, e.Effort)
+				}
+				models = append(models, cm)
 			}
-			done <- names
+			done <- models
 			return
 		}
 		done <- nil
 	}()
 	select {
-	case names := <-done:
+	case models := <-done:
 		codexModelsMu.Lock()
-		codexModels = names
+		codexModels = models
 		codexModelsMu.Unlock()
 	case <-time.After(20 * time.Second):
 	}

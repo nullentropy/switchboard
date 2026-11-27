@@ -34,7 +34,7 @@ type focusView struct {
 	note, noteBar                                                                           *caution.Node
 	pend                                                                                    *caution.Node
 	icon                                                                                    *stateMark
-	modeSel                                                                                 *caution.Node
+	modeSel, agentChip, effortBox                                                           *caution.Node
 	tray                                                                                    *tray
 
 	shown      []shown
@@ -51,6 +51,7 @@ type focusView struct {
 	activityFX glint
 	busy       *busyAnim
 	cleared    int
+	agentLine  string
 	queued     string
 	editing    int
 	work       *caution.Node
@@ -125,6 +126,41 @@ func (v *View) setCompact(on bool) {
 	}
 }
 
+func (f *focusView) showAgent(s Snapshot) {
+	line := providerName(s.Meta.Provider)
+	if s.Meta.Model != "" {
+		line += " · " + s.Meta.Model
+	}
+	effort := s.effort()
+	if effort != "" {
+		line += " · " + effort + " effort"
+	}
+	if line == f.agentLine {
+		return
+	}
+	f.agentLine = line
+	c := chip(line, agentIcon(s.Meta.Provider))
+	f.agentChip.Clear()
+	f.agentChip.W(textW(line, 11, false) + 30).Add(c)
+
+	f.effortBox.Clear()
+	opts := f.v.hub.efforts(s.Meta.Provider, s.Meta.Model)
+	if opts == nil {
+		f.effortBox.W(0)
+		return
+	}
+	names, cur := opts, slices.Index(opts, effort)
+	if cur < 0 {
+		names, cur = append([]string{"Effort"}, opts...), 0
+	}
+	sel := caution.Select(names, cur).Tip("Reasoning effort").OnSelect(func(i int) {
+		if slices.Contains(opts, names[i]) {
+			go f.a.SetEffort(names[i])
+		}
+	})
+	f.effortBox.W(110).Add(sel.Anchor(fill()))
+}
+
 func (f *focusView) build() {
 	a := f.a
 	snap := a.Snapshot()
@@ -135,18 +171,18 @@ func (f *focusView) build() {
 		OnSelect(func(i int) { go a.SetMode(modes[i]) })
 
 	f.icon = newMark(stateIcon(snap.State), 16, "$stWork")
-	agentLine := providerName(snap.Meta.Provider)
-	if snap.Meta.Model != "" {
-		agentLine += " · " + snap.Meta.Model
-	}
+	f.agentChip = caution.Panel().H(20)
+	f.effortBox = caution.Panel().H(28)
+	f.showAgent(snap)
 	top := caution.Panel().Dock("top").H(56).Bg("$titlebar").Kids(
 		caution.HStack().Gap(8).Align("center").Anchor(caution.A{Left: px(14), CenterY: px(0)}).Kids(
 			iconButton(icBack, "All sessions (Esc)", f.v.closeFocus)),
-		caution.VStack().Gap(3).Anchor(caution.A{Left: px(58), Right: px(320), CenterY: px(0)}).Kids(
-			caution.HStack().Gap(9).Align("center").Kids(f.icon.box, f.title, chip(agentLine, agentIcon(snap.Meta.Provider)), f.stateL),
+		caution.VStack().Gap(3).Anchor(caution.A{Left: px(58), Right: px(440), CenterY: px(0)}).Kids(
+			caution.HStack().Gap(9).Align("center").Kids(f.icon.box, f.title, f.agentChip, f.stateL),
 			f.sub,
 		),
 		caution.HStack().Gap(8).Align("center").Anchor(caution.A{Right: px(14), CenterY: px(0)}).Kids(
+			f.effortBox,
 			f.modeSel.W(150),
 			iconButton(icPause, "Interrupt the turn ("+modLabel+".)", a.Interrupt),
 			iconButton(icPower, "End session…", func() { f.v.confirmEnd(a) }),
@@ -376,6 +412,7 @@ func (f *focusView) update(s Snapshot) {
 		where = s.Meta.Goal + "  ·  " + where
 	}
 	f.sub.SetText(where)
+	f.showAgent(s)
 	f.turnFrom, f.cost = s.TurnFrom, s.Cost
 	f.ctxUsed, f.ctxWindow = s.CtxUsed, s.CtxWindow
 

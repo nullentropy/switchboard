@@ -215,7 +215,7 @@ var (
 var toolDefs = []map[string]any{
 	{"name": "system_load", "description": "How loaded the machine is: load average against its cores, free memory and swap, whether it is overloaded, and each session's CPU and memory with its busiest process and the subagents and background commands it is running.",
 		"inputSchema": obj(map[string]any{})},
-	{"name": "list_sessions", "description": "Every session on the wall: id, title, folder, branch, state, current activity, last reply, anything waiting on the user, how many messages are pending (sent mid-turn, not yet delivered), and cost. State is Starting, Working, Needs you, Background, Ready, Failed, Interrupted, Waiting for limit or Stopped. Background means its turn ended but subagents or background commands it started are still running; each one wakes it when it finishes, and a message reaches it at once. background lists every subagent and background command running in a session: kind (agent, command or monitor), description and running_seconds. Interrupted means Switchboard quit in the middle of its turn or while it had background work running; a message resumes it. Waiting for limit means a usage limit stopped its turn; resumes_at says when Switchboard sends it a continue message, and a message from you resumes it now. Stopped means the user or you stopped it.",
+	{"name": "list_sessions", "description": "Every session on the wall: id, title, folder, branch, state, current activity, last reply, anything waiting on the user, how many messages are pending (sent mid-turn, not yet delivered), cost, and reasoning effort when the agent reported it or Switchboard set it. State is Starting, Working, Needs you, Background, Ready, Failed, Interrupted, Waiting for limit or Stopped. Background means its turn ended but subagents or background commands it started are still running; each one wakes it when it finishes, and a message reaches it at once. background lists every subagent and background command running in a session: kind (agent, command or monitor), description and running_seconds. Interrupted means Switchboard quit in the middle of its turn or while it had background work running; a message resumes it. Waiting for limit means a usage limit stopped its turn; resumes_at says when Switchboard sends it a continue message, and a message from you resumes it now. Stopped means the user or you stopped it.",
 		"inputSchema": obj(map[string]any{})},
 	{"name": "read_session", "description": "The recent transcript of one session, oldest first.",
 		"inputSchema": obj(map[string]any{"session": idProp, "limit": map[string]any{"type": "integer", "description": "How many entries, default 20."}}, "session")},
@@ -227,6 +227,7 @@ var toolDefs = []map[string]any{
 			"prompt":          strProp("The first message. Make it a complete instruction."),
 			"agent":           strProp("Which coding agent runs it: claude, codex or gemini. Leave out for claude."),
 			"model":           strProp("A model name the chosen agent accepts. Leave out for its default."),
+			"effort":          strProp("Reasoning effort. claude: low, medium, high, xhigh or max. codex: what the model supports, from none, minimal, low, medium, high, xhigh, max and ultra. gemini has no effort setting and refuses this. Leave out for the agent's default."),
 			"permission_mode": strProp("default, acceptEdits, auto or plan. Leave out for the user's default."),
 			"worktree":        map[string]any{"type": "boolean", "description": "Run it in its own git worktree on a new branch. Leave out to get one only when another session already works in the same repository."},
 		}, "folder", "prompt")},
@@ -288,6 +289,9 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 				"id": s.Meta.ID, "title": s.Meta.Title, "agent": providerOf(s.Meta), "goal": s.Meta.Goal, "goal_done": m.hub.GoalDone(s.Meta.Goal), "folder": s.Meta.Cwd, "branch": s.Branch,
 				"state": s.State.String(), "activity": s.Activity, "permission_mode": s.Meta.Mode,
 				"last_reply": oneLine(lastReply(s.Entries)), "cost_usd": fmt.Sprintf("%.2f", s.Cost),
+			}
+			if e := s.effort(); e != "" {
+				row["effort"] = e
 			}
 			if len(s.Pending) > 0 {
 				p := s.Pending[0]
@@ -364,6 +368,10 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 		if prov != "" && prov != "claude" && prov != "codex" && prov != "gemini" {
 			return "", fmt.Errorf("unknown agent %q; use claude, codex or gemini", prov)
 		}
+		effort := strings.ToLower(str("effort"))
+		if err := m.hub.checkEffort(prov, str("model"), effort); err != nil {
+			return "", err
+		}
 		if err := checkBin(m.hub, prov); err != nil {
 			return "", err
 		}
@@ -371,7 +379,7 @@ func (m *mcpServer) call(name string, args map[string]any) (string, error) {
 		if b, ok := args["worktree"].(bool); ok {
 			wt = b
 		}
-		a, err := m.hub.New(Meta{Provider: prov, Title: str("title"), Cwd: dir, Model: str("model"), Mode: mode, Parent: "dispatcher", Goal: str("goal")}, wt)
+		a, err := m.hub.New(Meta{Provider: prov, Title: str("title"), Cwd: dir, Model: str("model"), Effort: effort, Mode: mode, Parent: "dispatcher", Goal: str("goal")}, wt)
 		if err != nil {
 			return "", err
 		}

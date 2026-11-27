@@ -25,6 +25,9 @@ func (claudeDriver) launch(a *Agent) (*proc, error) {
 	if m.Model != "" {
 		args = append(args, "--model", m.Model)
 	}
+	if m.Effort != "" {
+		args = append(args, "--effort", m.Effort)
+	}
 	if a.extraArgs != nil {
 		args = append(args, a.extraArgs()...)
 	} else {
@@ -60,6 +63,11 @@ func (claudeDriver) interrupt(a *Agent) { claudeControl(a, map[string]any{"subty
 
 func (claudeDriver) setMode(a *Agent, mode string) {
 	claudeControl(a, map[string]any{"subtype": "set_permission_mode", "mode": mode})
+}
+
+func (claudeDriver) setEffort(a *Agent, effort string) {
+	claudeControl(a, map[string]any{"subtype": "apply_flag_settings", "settings": map[string]any{"effortLevel": effort}})
+	claudeControl(a, map[string]any{"subtype": "get_settings"})
 }
 
 func (claudeDriver) answer(a *Agent, p *Pending, allow, always bool, answers map[string]string, reason string) {
@@ -135,6 +143,9 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 			}
 			if !a.replaying {
 				a.wake()
+			}
+			if p != nil {
+				go p.writeJSON(map[string]any{"type": "control_request", "request_id": newID(), "request": map[string]any{"subtype": "get_settings"}})
 			}
 			a.live()
 			return true
@@ -237,6 +248,16 @@ func claudeApply(a *Agent, p *proc, m map[string]any) bool {
 			return true
 		}
 		a.turnEnd(errText)
+		return true
+	case "control_response":
+		resp, _ := m["response"].(map[string]any)
+		settings, _ := resp["response"].(map[string]any)
+		applied, _ := settings["applied"].(map[string]any)
+		effort, _ := applied["effort"].(string)
+		if effort == "" || effort == a.effortSeen {
+			return false
+		}
+		a.effortSeen = effort
 		return true
 	case "control_request":
 		id, _ := m["request_id"].(string)
