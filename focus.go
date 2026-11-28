@@ -170,7 +170,7 @@ func (f *focusView) build() {
 	f.modeSel = caution.Select(modeLabels, indexOf(modes, snap.Meta.Mode)).Tip("Permission mode").
 		OnSelect(func(i int) { go a.SetMode(modes[i]) })
 
-	f.icon = newMark(stateIcon(snap.State), 16, "$stWork")
+	f.icon = newMark(f.v.set, stateIcon(snap.State), 16, "$stWork")
 	f.agentChip = caution.Panel().H(20)
 	f.effortBox = caution.Panel().H(28)
 	f.showAgent(snap)
@@ -403,7 +403,7 @@ func (f *focusView) update(s Snapshot) {
 	if s.State == Background {
 		f.stateL.SetText(waitingOn(s.Subs))
 	}
-	f.icon.set(stateIcon(s.State), tok)
+	f.icon.set(f.v.set, stateIcon(s.State), tok)
 	where := shortPath(s.Meta.Cwd)
 	if s.Branch != "" {
 		where += "  ·  " + s.Branch
@@ -679,7 +679,7 @@ func (f *focusView) addTool(e Entry) shown {
 	if text == "" {
 		text = e.Tool
 	}
-	mark := newMark(icCircle, 12, "$inkFaint")
+	mark := newMark(f.v.set, icCircle, 12, "$inkFaint")
 	name := caution.Label(toolName(e.Tool)).FontSize(12).Color("$inkFaint")
 	timer := caution.Label("").FontSize(12).Color("$inkFaint")
 	idx := len(f.shown)
@@ -740,15 +740,15 @@ func (f *focusView) refreshEntry(sh *shown, e Entry) {
 	switch {
 	case e.Failed:
 		sh.gutter.SetColor("$stFail")
-		sh.mark.set(icFail, "$stFail")
+		sh.mark.set(f.v.set, icFail, "$stFail")
 		if sh.run != nil {
 			sh.run.failed = true
 			f.unfold(sh.run)
 		}
 	case e.Detail != "" || e.Rev > 0:
-		sh.mark.set(icCheck, "$stReady")
+		sh.mark.set(f.v.set, icCheck, "$stReady")
 	default:
-		sh.mark.set(icLoader, "$stWork")
+		sh.mark.set(f.v.set, icLoader, "$stWork")
 	}
 	if e.Failed && !sh.open && e.Detail != "" {
 		f.showDetail(sh, e)

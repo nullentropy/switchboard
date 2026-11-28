@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"encoding/base64"
+	"strings"
 
 	caution "github.com/nullentropy/caution"
 )
@@ -85,42 +86,82 @@ func agentIcon(provider string) string {
 	return icSparkles
 }
 
-const spinFrag = `
+const orbitFrag = `
 vec4 effect(vec2 uv) {
-  float a = -u_time * 4.0;
   vec2 p = (uv - 0.5) * u_res;
-  p = vec2(p.x * cos(a) - p.y * sin(a), p.x * sin(a) + p.y * cos(a));
-  vec2 q = p / u_res + 0.5;
-  if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) return vec4(0.0);
-  return src(q);
+  float s = 0.5 * min(u_res.x, u_res.y);
+  float d = length(p);
+  float phi = atan(p.y, p.x);
+  float g = (d - 0.64 * s) / 0.9;
+  float a = 0.14 * exp(-g * g);
+  for (int i = 0; i < 3; i++) {
+    float k = float(i);
+    float r = (0.56 + 0.08 * k) * s;
+    float th = u_time * 3.6 + 2.0944 * k + 0.45 * sin(u_time * 0.8 + 2.0 * k);
+    float lag = mod(th - phi, 6.28318);
+    float w = max(0.11 * s * (1.0 - lag * 0.22), 0.35);
+    float e = (d - r) / w;
+    float tail = 0.7 * exp(-lag * 1.8) * exp(-e * e);
+    vec2 q = p - r * vec2(cos(th), sin(th));
+    float h = dot(q, q) / (s * s);
+    a += tail + exp(-h * 55.0) + 0.22 * exp(-h * 14.0);
+  }
+  a = clamp(a, 0.0, 1.0);
+  return vec4(vec3(tintR, tintG, tintB) * a, a);
 }`
 
 const stillFrag = `vec4 effect(vec2 uv) { return src(uv); }`
 
 type stateMark struct {
-	box, glyph *caution.Node
-	spinning   bool
+	box, glyph, orbit *caution.Node
+	color             string
+	tint              [3]float64
 }
 
-func newMark(glyph string, size float64, color string) *stateMark {
+func newMark(set Settings, glyph string, size float64, color string) *stateMark {
 	m := &stateMark{glyph: icon("", size, color).Anchor(caution.A{CenterX: px(0), CenterY: px(0)})}
 	m.box = caution.Panel().W(size + 4).H(size + 4).Kids(m.glyph)
-	m.set(glyph, color)
+	m.set(set, glyph, color)
 	return m
 }
 
-func (m *stateMark) set(glyph, color string) {
-	m.glyph.SetText(glyph).SetColor(color)
-	spin := glyph == icLoader
-	if spin == m.spinning {
+func (m *stateMark) set(set Settings, glyph, color string) {
+	m.color = color
+	if glyph != icLoader {
+		if m.orbit != nil {
+			m.orbit.Remove()
+			m.orbit = nil
+		}
+		m.glyph.SetText(glyph).SetColor(color)
 		return
 	}
-	m.spinning = spin
-	if spin {
-		m.box.Effect(caution.FX{Frag: spinFrag, Animate: true})
-	} else {
-		m.box.Effect(caution.FX{Frag: stillFrag})
+	m.glyph.SetText("")
+	if m.orbit == nil {
+		m.tint = markTint(set, color)
+		m.orbit = caution.Shader(caution.FX{Frag: orbitFrag, Animate: true, Uniforms: tintUniforms(m.tint)}).Anchor(fill())
+		m.box.Add(m.orbit)
+		return
 	}
+	m.retint(set)
+}
+
+func (m *stateMark) retint(set Settings) {
+	if m.orbit == nil {
+		return
+	}
+	if tint := markTint(set, m.color); tint != m.tint {
+		m.tint = tint
+		m.orbit.SetUniforms(tintUniforms(tint))
+	}
+}
+
+func markTint(set Settings, color string) [3]float64 {
+	r, g, b := tokenRGB(set, strings.TrimPrefix(color, "$"))
+	return [3]float64{r, g, b}
+}
+
+func tintUniforms(c [3]float64) map[string]float64 {
+	return map[string]float64{"tintR": c[0], "tintG": c[1], "tintB": c[2]}
 }
 
 const shimmerFrag = `

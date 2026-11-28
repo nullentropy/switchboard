@@ -141,7 +141,7 @@ func (v *View) railOrder() ([]*Agent, bool) {
 
 func (v *View) newRow(a *Agent) *railRow {
 	r := &railRow{
-		icon:  newMark("", 14, "$inkDim"),
+		icon:  newMark(v.set, "", 14, "$inkDim"),
 		title: caution.Label("").FontSize(13).Weight(600),
 		agent: icon("", 12, "$inkFaint"),
 		line:  caution.Label("").FontSize(12).Color("$inkDim"),
@@ -167,7 +167,7 @@ func (v *View) updateRow(a *Agent, s Snapshot) {
 	if r == nil || v.focus == nil {
 		return
 	}
-	r.icon.set(stateIcon(s.State), "$"+stateToken(s.State))
+	r.icon.set(v.set, stateIcon(s.State), "$"+stateToken(s.State))
 	r.title.SetText(clip(s.Meta.Title, 22))
 	r.agent.SetText(agentIcon(s.Meta.Provider))
 	if a == v.hub.Dispatcher {

@@ -532,13 +532,22 @@ func (v *View) settingsChanged() {
 			for _, t := range v.tiles {
 				t.restyle()
 				t.statusFX.retint(set)
+				t.icon.retint(set)
+				t.miniIcon.retint(set)
 			}
 			for _, r := range v.rows {
 				r.lineFX.retint(set)
+				r.icon.retint(set)
 			}
-			if v.focus != nil {
-				v.focus.restyle()
-				v.focus.activityFX.retint(set)
+			if f := v.focus; f != nil {
+				f.restyle()
+				f.activityFX.retint(set)
+				f.icon.retint(set)
+				for _, sh := range f.shown {
+					if sh.mark != nil {
+						sh.mark.retint(set)
+					}
+				}
 			}
 		}
 		if v.loadUI() {

@@ -13,11 +13,11 @@ type tile struct {
 	v *View
 	a *Agent
 
-	icon                                                                 *stateMark
-	node, title, agent, badge, status, trail, where, meta, action, bar   *caution.Node
-	card, row, fix, edge, mini, miniIcon, miniTitle, miniAgent, miniLine *caution.Node
-	trailRow, miniBadge, miniMeta                                        *caution.Node
-	statusFX                                                             glint
+	icon, miniIcon                                                     *stateMark
+	node, title, agent, badge, status, trail, where, meta, action, bar *caution.Node
+	card, row, fix, edge, mini, miniTitle, miniAgent, miniLine         *caution.Node
+	trailRow, miniBadge, miniMeta                                      *caution.Node
+	statusFX                                                           glint
 
 	snap     Snapshot
 	state    State
@@ -80,7 +80,7 @@ func (v *View) sessionMenu(a *Agent) []caution.ContextItem {
 func newTile(v *View, a *Agent) *tile {
 	t := &tile{v: v, a: a, state: -1}
 	open := func() { v.select_(a); v.openFocus(a) }
-	t.icon = newMark(icLoader, 18, "$stWork")
+	t.icon = newMark(v.set, icLoader, 18, "$stWork")
 	t.title = caution.Label("").FontSize(14).Weight(620)
 	t.agent = caution.HStack()
 	t.badge = caution.HStack()
@@ -106,7 +106,7 @@ func newTile(v *View, a *Agent) *tile {
 		Kids(caution.Glass().HoverFill("$hover").Anchor(fill()).OnPick(func(_, _ float64, _ *caution.Node) { open() }), t.edge, content).
 		Context(ctx...)
 
-	t.miniIcon = icon(icCheck, 15, "$stReady")
+	t.miniIcon = newMark(v.set, icCheck, 15, "$stReady")
 	t.miniTitle = caution.Label("").FontSize(13).Weight(600)
 	t.miniAgent = icon(icSparkles, 11, "$inkFaint")
 	t.miniLine = caution.Label("").FontSize(12).Color("$inkDim").Clips().Fill(1)
@@ -115,8 +115,8 @@ func newTile(v *View, a *Agent) *tile {
 	t.mini = caution.Panel().H(64).Bg("$panel").Radius(10).Border("$edgeSoft", 1).Clips().Kids(
 		caution.Glass().HoverFill("$hover").Anchor(fill()).OnPick(func(_, _ float64, _ *caution.Node) { open() }),
 		caution.VStack().Gap(5).Anchor(caution.A{Left: px(12), Right: px(12), CenterY: px(0)}).Align("stretch").Kids(
-			caution.HStack().Gap(7).Align("center").Kids(t.miniIcon, t.miniTitle, t.miniAgent, caution.Panel().Fill(1), t.miniMeta, t.miniBadge),
-			caution.HStack().Kids(caution.Panel().W(15), t.miniLine),
+			caution.HStack().Gap(7).Align("center").Kids(t.miniIcon.box, t.miniTitle, t.miniAgent, caution.Panel().Fill(1), t.miniMeta, t.miniBadge),
+			caution.HStack().Kids(caution.Panel().W(19), t.miniLine),
 		),
 	).Context(ctx...)
 	return t
@@ -129,7 +129,7 @@ func (t *tile) update(s Snapshot) {
 	t.turnFrom = s.TurnFrom
 	t.cost = s.Cost
 	tok := "$" + stateToken(s.State)
-	t.icon.set(stateIcon(s.State), tok)
+	t.icon.set(t.v.set, stateIcon(s.State), tok)
 	t.title.SetText(clip(s.Meta.Title, 26))
 	if stateChanged || t.agent.Children() == nil {
 		t.agent.Clear()
@@ -148,7 +148,7 @@ func (t *tile) update(s Snapshot) {
 	t.where.SetText(clip(where, 40))
 	t.updateTrail(s)
 
-	t.miniIcon.SetText(stateIcon(s.State)).SetColor(tok)
+	t.miniIcon.set(t.v.set, stateIcon(s.State), tok)
 	t.miniTitle.SetText(clip(s.Meta.Title, 24))
 	t.miniAgent.SetText(agentIcon(s.Meta.Provider))
 	t.miniLine.SetText(clip(text, 54))

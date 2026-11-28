@@ -531,7 +531,7 @@ func (r *uiRenderer) component(n *uiNode, sc *uiScope) (*caution.Node, error) {
 		t.update(s)
 		return t.node, nil
 	case "sb.stateDot":
-		return newMark(stateIcon(s.State), 14, "$"+stateToken(s.State)).box, nil
+		return newMark(r.v.set, stateIcon(s.State), 14, "$"+stateToken(s.State)).box, nil
 	case "sb.sprite":
 		return r.sprite(a, s), nil
 	case "sb.activity":

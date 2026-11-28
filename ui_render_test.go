@@ -218,7 +218,7 @@ func TestUIRenderTheDocExampleRailRow(t *testing.T) {
 	if ford.Type() != wire.Panel || ford.Prop("height") == nil || ford.Prop("height").(float64) <= 0 {
 		t.Fatalf("a clickable hstack sits in a sized panel, got %s height %v", ford.Type(), ford.Prop("height"))
 	}
-	if dots := uiFindAll(ford, func(n *caution.Node) bool { return n.Prop("text") == stateIcon(Working) }); len(dots) != 1 {
+	if dots := uiFindAll(ford, func(n *caution.Node) bool { return n.Prop("frag") == orbitFrag }); len(dots) != 1 {
 		t.Fatalf("Ford's row has %d working state dots", len(dots))
 	}
 
@@ -345,8 +345,10 @@ func TestUIRenderTheBuiltInComponents(t *testing.T) {
 	if len(uiFindAll(activity, func(n *caution.Node) bool { return n.Type() == wire.Image })) != 1 {
 		t.Error("a working session's activity strip has no sprite")
 	}
-	if uiByText(t, dot, stateIcon(Working)).Prop("color") != "$stWork" {
-		t.Errorf("Ford's state dot is not the working colour")
+	r, g, bl := tokenRGB(w.v.set, "stWork")
+	if orbits := uiFindAll(dot, func(n *caution.Node) bool { return n.Prop("frag") == orbitFrag }); len(orbits) != 1 ||
+		!reflect.DeepEqual(orbits[0].Prop("uniforms"), map[string]float64{"tintR": r, "tintG": g, "tintB": bl}) {
+		t.Errorf("Ford's state dot is not an orbit in the working colour")
 	}
 	if got := uiTexts(limits); !slices.Contains(got, "Claude") || !slices.Contains(got, "Codex") || slices.Contains(got, "Gemini") {
 		t.Errorf("limits texts %v", got)

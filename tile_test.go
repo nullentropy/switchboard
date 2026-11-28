@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"testing"
 
 	caution "github.com/nullentropy/caution"
@@ -45,5 +46,25 @@ func TestAWorkingTileKeepsItsBorderVisibleOnAllFourSides(t *testing.T) {
 		if e, b := tl.edge.Prop("bg"), tl.node.Prop("bg"); e != b {
 			t.Errorf("selected=%v: the edge strip is %v on a %v tile", selected, e, b)
 		}
+	}
+}
+
+func TestAWorkingMarkOrbitsInTheThemesWorkColourAndRetintsWithTheTheme(t *testing.T) {
+	dark, light := Settings{Theme: "Gruvbox"}, Settings{Theme: "Paper"}
+	tint := func(set Settings) map[string]float64 {
+		r, g, b := tokenRGB(set, "stWork")
+		return map[string]float64{"tintR": r, "tintG": g, "tintB": b}
+	}
+	m := newMark(dark, icLoader, 14, "$stWork")
+	if m.orbit == nil || m.glyph.Prop("text") != "" || !reflect.DeepEqual(m.orbit.Prop("uniforms"), tint(dark)) {
+		t.Fatalf("working mark: orbit %v glyph %q", m.orbit, m.glyph.Prop("text"))
+	}
+	m.retint(light)
+	if !reflect.DeepEqual(m.orbit.Prop("uniforms"), tint(light)) {
+		t.Fatalf("after the theme change the orbit is tinted %v", m.orbit.Prop("uniforms"))
+	}
+	m.set(light, icCheck, "$stReady")
+	if m.orbit != nil || len(m.box.Children()) != 1 || m.glyph.Prop("text") != icCheck {
+		t.Fatalf("a ready mark keeps the orbit or loses its glyph")
 	}
 }
