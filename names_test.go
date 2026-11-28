@@ -1,9 +1,10 @@
 package main
 
 import (
-	caution "github.com/nullentropy/caution"
 	"testing"
 	"time"
+
+	caution "github.com/nullentropy/caution"
 )
 
 func TestALongToolNameIsShortenedToFitItsColumn(t *testing.T) {

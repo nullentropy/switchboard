@@ -12,6 +12,9 @@ import (
 	"time"
 
 	caution "github.com/nullentropy/caution"
+
+	"switchboard/platform"
+	"switchboard/uiscript"
 )
 
 var px = caution.Px
@@ -84,7 +87,7 @@ func mountView(hub *Hub, native bool) func(s *caution.Session) *caution.Node {
 	return func(s *caution.Session) *caution.Node {
 		v := &View{s: s, hub: hub, tiles: map[*Agent]*tile{}, set: hub.Settings(), dState0: -1, native: native}
 		if native {
-			setDockIcon(appIcon)
+			platform.SetDockIcon(appIcon)
 		}
 		root := v.build()
 		hub.attach(v)
@@ -132,18 +135,18 @@ func (v *View) menus() []caution.Menu {
 	return []caution.Menu{
 		{Title: "Switchboard", App: true, Items: []caution.MenuItem{
 			{Title: "Check for Updates…", OnPick: v.checkForUpdates},
-			{Title: "Settings…", Key: modKey + "+,", OnPick: v.openSettings},
+			{Title: "Settings…", Key: platform.ModKey + "+,", OnPick: v.openSettings},
 		}},
 		{Title: "File", Items: []caution.MenuItem{
-			{Title: "New Session…", Key: modKey + "+n", OnPick: v.openNew},
+			{Title: "New Session…", Key: platform.ModKey + "+n", OnPick: v.openNew},
 		}},
 		{Title: "Session", Items: []caution.MenuItem{
-			{Title: "Write a Message", Key: modKey + "+l", OnPick: v.focusInput},
-			{Title: "Next Session That Needs You", Key: modKey + "+j", OnPick: v.nextWaiting},
+			{Title: "Write a Message", Key: platform.ModKey + "+l", OnPick: v.focusInput},
+			{Title: "Next Session That Needs You", Key: platform.ModKey + "+j", OnPick: v.nextWaiting},
 		}},
 		{Title: "View", Items: []caution.MenuItem{
-			{Title: "Commands…", Key: modKey + "+k", OnPick: v.openPalette},
-			{Title: "All Sessions", Key: modKey + "+0", OnPick: v.closeFocus},
+			{Title: "Commands…", Key: platform.ModKey + "+k", OnPick: v.openPalette},
+			{Title: "All Sessions", Key: platform.ModKey + "+0", OnPick: v.closeFocus},
 		}},
 		{Title: "Help", Items: []caution.MenuItem{
 			{Title: "Keyboard Shortcuts", OnPick: v.openShortcuts},
@@ -189,7 +192,7 @@ func (v *View) build() *caution.Node {
 		v.updateBox,
 		v.limitsBox,
 		v.projBox,
-		caution.Button("New session  "+modLabel+"N").Primary().Tip("Or double-click empty space").OnClick(v.openNew),
+		caution.Button("New session  "+platform.ModLabel+"N").Primary().Tip("Or double-click empty space").OnClick(v.openNew),
 	)
 	v.header = caution.Panel().Dock("top").H(v.headerH(false)).Bg("$titlebar").WindowDrag().Kids(v.headBrand, v.statsRow, v.headRight)
 	v.rule = caution.Panel().Dock("top").H(1).Bg("$edgeSoft")
@@ -300,7 +303,7 @@ func (v *View) buildConsole() *caution.Node {
 	return caution.Panel().Dock("bottom").H(consoleH).Bg("$titlebar").Clips().Kids(
 		caution.Panel().H(1).Bg("$edgeSoft").Anchor(caution.A{Left: px(0), Right: px(0), Top: px(0)}),
 		caution.HStack().Gap(10).Align("center").Anchor(caution.A{Left: px(16), Right: px(16), CenterY: px(0)}).Kids(
-			icon(icSparkles, 16, "$accent"), v.cmd.Fill(1), kbd(modLabel+"L"), caution.Panel().W(8),
+			icon(icSparkles, 16, "$accent"), v.cmd.Fill(1), kbd(platform.ModLabel+"L"), caution.Panel().W(8),
 			caution.Button(shortcutsLabel).Tip("Every keyboard shortcut").OnClick(v.openShortcuts), v.dStatus),
 	)
 }
@@ -308,7 +311,7 @@ func (v *View) buildConsole() *caution.Node {
 const shortcutsLabel = "Shortcuts  ?"
 
 func (v *View) fitConsole(w, _ float64) {
-	help := 16 + 16 + 10 + 10 + textW(modLabel+"L", 10, true) + 10 + 10 + 8 + 10 + textW(shortcutsLabel, 13, false) + 2*16 + 10 + 16
+	help := 16 + 16 + 10 + 10 + textW(platform.ModLabel+"L", 10, true) + 10 + 10 + 8 + 10 + textW(shortcutsLabel, 13, false) + 2*16 + 10 + 16
 	v.dStatus.W(min(statusW, max(0, w-help)))
 }
 
@@ -851,7 +854,7 @@ func (v *View) openSettings() {
 	upd := caution.Checkbox("Update automatically", !set.UpdatesOff).OnToggle(func(b bool) {
 		v.hub.UpdateSettings(func(s *Settings) { s.UpdatesOff = !b })
 	})
-	uiNames := append([]string{uiDefaultName}, v.uiNames()...)
+	uiNames := append([]string{uiscript.DefaultName}, v.uiNames()...)
 	curUI, _ := v.hub.ActiveUI()
 	pickUI := caution.Select(uiNames, max(0, indexOf(uiNames, curUI))).Tip("The interface every window shows").OnSelect(func(i int) {
 		name := ""

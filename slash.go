@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"switchboard/platform"
 )
 
 type slashCmd struct {
@@ -27,7 +29,7 @@ type claudeInit struct {
 func claudeInitialize(bin, dir string) (*claudeInit, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := commandContext(ctx, bin, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose")
+	cmd := platform.CommandContext(ctx, bin, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose")
 	cmd.Dir = dir
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -38,15 +40,15 @@ func claudeInitialize(bin, dir string) (*claudeInit, error) {
 		return nil, err
 	}
 	cmd.Cancel = func() error {
-		killTree(cmd.Process)
+		platform.KillTree(cmd.Process)
 		return nil
 	}
-	if err := startProcess(cmd, false); err != nil {
+	if err := platform.StartProcess(cmd, false); err != nil {
 		return nil, err
 	}
 	defer func() {
 		stdin.Close()
-		killTree(cmd.Process)
+		platform.KillTree(cmd.Process)
 		cmd.Wait()
 	}()
 	req, _ := json.Marshal(map[string]any{"type": "control_request", "request_id": "commands", "request": map[string]any{"subtype": "initialize"}})

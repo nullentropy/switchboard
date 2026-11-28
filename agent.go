@@ -11,6 +11,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"switchboard/platform"
+	"switchboard/widget"
 )
 
 type State int
@@ -92,8 +95,8 @@ type Entry struct {
 	Rev    int
 	Start  time.Time
 	End    time.Time
-	Widget *Widget
-	Answer *WidgetAnswer
+	Widget *widget.Widget
+	Answer *widget.Answer
 	Images []Image
 }
 
@@ -895,7 +898,7 @@ func (a *Agent) refreshBranch() {
 			a.mu.Unlock()
 		}
 	}
-	out, err := command("git", "-C", a.Meta.Cwd, "branch", "--show-current").Output()
+	out, err := platform.Command("git", "-C", a.Meta.Cwd, "branch", "--show-current").Output()
 	if err != nil {
 		return
 	}

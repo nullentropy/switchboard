@@ -13,6 +13,9 @@ import (
 
 	caution "github.com/nullentropy/caution"
 	"github.com/nullentropy/caution/native"
+
+	"switchboard/platform"
+	"switchboard/update"
 )
 
 func main() {
@@ -25,7 +28,7 @@ func main() {
 	demoN := flag.Int("demo-sessions", 7, "how many pretend sessions -demo starts")
 	defaultUI := flag.Bool("default-ui", false, "use the default interface for this run instead of the saved one (holding Shift at launch does the same on macOS and Windows)")
 	flag.Parse()
-	prepareApp()
+	platform.PrepareApp()
 
 	bins := map[string]string{"claude": *claudeBin, "codex": *codexBin, "gemini": *geminiBin}
 	if *demo {
@@ -37,7 +40,7 @@ func main() {
 	if !*demo {
 		startUpdates(hub, &flushWindow)
 	}
-	hub.bootUI(*defaultUI || shiftHeld())
+	hub.bootUI(*defaultUI || platform.ShiftHeld())
 	go hub.loadCodexModels()
 	go hub.loadClaudeModels()
 	if err := checkBin(hub, "claude"); err != nil && !*demo {
@@ -96,26 +99,26 @@ func defaultStatePath() string {
 // startUpdates installs a staged release before anything else starts, then
 // keeps checking for newer ones.
 func startUpdates(hub *Hub, flushWindow *func()) {
-	u := newUpdater()
-	if _, ok := parseTag(u.version); !ok {
+	u := update.New(version, filepath.Join(filepath.Dir(defaultStatePath()), "update"))
+	if _, ok := update.ParseTag(u.Version); !ok {
 		return
 	}
-	root, exe, err := installRoot()
+	root, exe, err := update.InstallRoot()
 	if err != nil {
 		log.Printf("update: find the install: %v", err)
 		return
 	}
-	if ok, err := u.atLaunch(hub.Settings(), root); err != nil {
+	if ok, err := u.AtLaunch(hub.Settings().UpdatesOff, root); err != nil {
 		log.Printf("update: %v", err)
 	} else if ok {
 		log.Printf("update: installed, relaunching")
-		if err := relaunch(exe); err != nil {
+		if err := platform.Relaunch(exe); err != nil {
 			log.Printf("update: relaunch: %v", err)
 		}
 	}
 	hub.updater = &u
 	hub.restart = func() error {
-		ok, err := u.installStaged(root)
+		ok, err := u.InstallStaged(root)
 		if err != nil {
 			return err
 		}
@@ -126,7 +129,7 @@ func startUpdates(hub *Hub, flushWindow *func()) {
 			(*flushWindow)()
 		}
 		hub.StopAll()
-		return relaunch(exe)
+		return platform.Relaunch(exe)
 	}
 	go hub.watchUpdates(u)
 }

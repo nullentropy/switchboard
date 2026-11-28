@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
+
+	"switchboard/platform"
 )
 
 var staticModels = map[string][]string{
@@ -71,7 +73,7 @@ func (h *Hub) loadCodexModels() {
 	if checkBin(h, "codex") != nil {
 		return
 	}
-	cmd := command(h.bin("codex"), "app-server")
+	cmd := platform.Command(h.bin("codex"), "app-server")
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return

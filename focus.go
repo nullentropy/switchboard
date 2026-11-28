@@ -7,6 +7,9 @@ import (
 	"time"
 
 	caution "github.com/nullentropy/caution"
+
+	"switchboard/platform"
+	"switchboard/widget"
 )
 
 type shown struct {
@@ -184,7 +187,7 @@ func (f *focusView) build() {
 		caution.HStack().Gap(8).Align("center").Anchor(caution.A{Right: px(14), CenterY: px(0)}).Kids(
 			f.effortBox,
 			f.modeSel.W(150),
-			iconButton(icPause, "Interrupt the turn ("+modLabel+".)", a.Interrupt),
+			iconButton(icPause, "Interrupt the turn ("+platform.ModLabel+".)", a.Interrupt),
 			iconButton(icPower, "End session…", func() { f.v.confirmEnd(a) }),
 		),
 	)
@@ -358,22 +361,22 @@ func (f *focusView) showQueued(qs []Queued, st State) {
 		case "dispatcher":
 			who = "Dispatcher"
 		case "widget":
-			text = widgetEventLabel(q.Text)
+			text = widget.EventLabel(q.Text)
 		}
 		var actions *caution.Node
 		if q.From == "widget" {
 			actions = caution.HStack().Gap(6).Align("center").Kids(
 				caution.Button("Clear").Tip("Drop it; the widget can be answered again").OnClick(func() { go f.a.ClearQueued(id) }),
-				caution.Button("Send now").Tip("Interrupt the turn and deliver pending messages now ("+shiftLabel+modLabel+"E)").OnClick(func() { go f.a.SendNow("") }))
+				caution.Button("Send now").Tip("Interrupt the turn and deliver pending messages now ("+platform.ShiftLabel+platform.ModLabel+"E)").OnClick(func() { go f.a.SendNow("") }))
 		} else if q.Editing {
 			actions = caution.HStack().Gap(6).Align("center").Kids(
 				caution.Label("Editing in the message box").FontSize(12).Color("$inkFaint"),
 				caution.Button("Cancel").Tip("Keep the original text (Esc)").OnClick(f.cancelEdit))
 		} else {
 			actions = caution.HStack().Gap(6).Align("center").Kids(
-				caution.Button("Edit").Tip("Change it before it is delivered ("+modLabel+"E edits the newest)").OnClick(func() { f.edit(id) }),
+				caution.Button("Edit").Tip("Change it before it is delivered ("+platform.ModLabel+"E edits the newest)").OnClick(func() { f.edit(id) }),
 				caution.Button("Clear").Tip("Drop it; it is never delivered").OnClick(func() { go f.a.ClearQueued(id) }),
-				caution.Button("Send now").Tip("Interrupt the turn and deliver pending messages now ("+shiftLabel+modLabel+"E)").OnClick(func() { go f.a.SendNow("") }))
+				caution.Button("Send now").Tip("Interrupt the turn and deliver pending messages now ("+platform.ShiftLabel+platform.ModLabel+"E)").OnClick(func() { go f.a.SendNow("") }))
 		}
 		content := caution.VStack().Gap(8).Fill(1).Align("stretch")
 		if len(q.Images) > 0 {
@@ -1034,7 +1037,7 @@ func (f *focusView) always(p *Pending) *caution.Node {
 	if !p.CanAlways {
 		return caution.Panel().W(0)
 	}
-	return caution.Button("Always  " + shiftLabel + "A").Tip("Allow this for the rest of the session").
+	return caution.Button("Always  " + platform.ShiftLabel + "A").Tip("Allow this for the rest of the session").
 		OnClick(func() { f.a.Answer(p.ReqID, true, true, nil) })
 }
 

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"switchboard/platform"
 )
 
 func TestTheDispatcherSavesACustomSpriteThatSurvivesARestart(t *testing.T) {
@@ -137,7 +139,7 @@ func TestDeleteSpriteRemovesOnlyCustomSprites(t *testing.T) {
 
 func TestWorkingSessionsPickOnlySpritesThatAreOnAndOneAlwaysStaysOn(t *testing.T) {
 	reduceMotion = func() bool { return false }
-	defer func() { reduceMotion = osReduceMotion }()
+	defer func() { reduceMotion = platform.ReduceMotion }()
 	set := Settings{Sprites: map[string]SpriteDef{"Trillian": {Frames: [][]string{{"r"}}}, "Zaphod": {Frames: [][]string{{"n"}}}}}
 	for _, s := range sprites {
 		if !setSpriteOn(&set, s.name, false) {

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"switchboard/platform"
 )
 
 type uiViewState struct {
@@ -20,13 +22,13 @@ var uiGroups = []string{"need", "work", "bg", "wait", "fail", "int", "done", "id
 const uiLoadTTL = 5 * time.Second
 
 var (
-	uiLoadRead = readLoad
+	uiLoadRead = platform.ReadLoad
 	uiLoadMu   sync.Mutex
 	uiLoadAt   time.Time
-	uiLoadLast loadSample
+	uiLoadLast platform.Load
 )
 
-func uiLoadSample(now time.Time) loadSample {
+func uiLoadSample(now time.Time) platform.Load {
 	uiLoadMu.Lock()
 	defer uiLoadMu.Unlock()
 	if uiLoadAt.IsZero() || now.Sub(uiLoadAt) >= uiLoadTTL || now.Before(uiLoadAt) {
@@ -110,7 +112,7 @@ func uiData(h *Hub, vs uiViewState) map[string]any {
 			"need": float64(count["need"]), "work": float64(count["work"]), "done": float64(count["done"]), "spent": spent,
 		},
 		"load": map[string]any{
-			"overloaded": load.overloaded(), "load": load.Load1, "cores": float64(load.Cores), "freeMemory": float64(load.MemFree),
+			"overloaded": load.Overloaded(), "load": load.Load1, "cores": float64(load.Cores), "freeMemory": float64(load.MemFree),
 		},
 		"limits": uiLimits(h.Limits(), now),
 		"update": map[string]any{"ready": version != "", "version": version},

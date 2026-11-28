@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"switchboard/platform"
 )
 
 func git(dir string, env []string, args ...string) (string, error) {
-	cmd := command("git", append([]string{"-C", dir}, args...)...)
+	cmd := platform.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), env...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
@@ -51,7 +53,7 @@ func slug(s string) string {
 }
 
 func worktreeHome() string {
-	base, err := dataDir()
+	base, err := platform.DataDir()
 	if err != nil {
 		base = os.TempDir()
 	}

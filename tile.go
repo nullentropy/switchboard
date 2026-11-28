@@ -7,6 +7,8 @@ import (
 	"time"
 
 	caution "github.com/nullentropy/caution"
+
+	"switchboard/platform"
 )
 
 type tile struct {
@@ -204,8 +206,8 @@ func (t *tile) setBadge(n int) {
 	t.badge.Clear()
 	t.miniBadge.Clear()
 	if n >= 1 && n <= 9 {
-		t.badge.Add(kbd(fmt.Sprintf("%s%d", modLabel, n)))
-		t.miniBadge.Add(kbd(fmt.Sprintf("%s%d", modLabel, n)))
+		t.badge.Add(kbd(fmt.Sprintf("%s%d", platform.ModLabel, n)))
+		t.miniBadge.Add(kbd(fmt.Sprintf("%s%d", platform.ModLabel, n)))
 	}
 }
 
@@ -462,7 +464,7 @@ func (t *tile) inboxCard(s Snapshot) *caution.Node {
 		}
 		if p.CanAlways {
 			buttons = append(buttons,
-				caution.Button("Always  "+shiftLabel+"A").Tip("Allow this for the rest of the session").OnClick(func() { a.Answer(p.ReqID, true, true, nil) }))
+				caution.Button("Always  "+platform.ShiftLabel+"A").Tip("Allow this for the rest of the session").OnClick(func() { a.Answer(p.ReqID, true, true, nil) }))
 		}
 		buttons = append(buttons, caution.Button("Allow  A").Primary().OnClick(func() { a.Answer(p.ReqID, true, false, nil) }))
 	}

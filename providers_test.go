@@ -286,18 +286,6 @@ func TestAMessageSentOverAPendingApprovalDeniesItWithThatMessageAndCarriesOn(t *
 	waitFor(t, a, "the new message reaching the agent", func(s Snapshot) bool { return s.State == NeedsYou && len(s.Pending) == 1 })
 }
 
-func TestAnAppOpenedFromFinderFindsAgentsOnTheLoginShellsPath(t *testing.T) {
-	dir := t.TempDir()
-	shell := dir + "/fakesh"
-	os.WriteFile(shell, []byte("#!/bin/sh\necho 'Share and enjoy'\nPATH=/Users/arthur/.local/bin:/usr/bin\neval \"$2\"\n"), 0o755)
-	if got := loginPath(shell); got != "/Users/arthur/.local/bin:/usr/bin" {
-		t.Fatalf("got %q", got)
-	}
-	if got := loginPath(dir + "/missing"); got != "" {
-		t.Fatalf("a broken shell gave %q", got)
-	}
-}
-
 func TestTheClaudeModelPickerListsTheModelsTheCLIOffers(t *testing.T) {
 	self, _ := os.Executable()
 	t.Setenv("SWITCHBOARD_FAKE", "claude")

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"switchboard/platform"
 )
 
 const limitNote = "[switchboard] Your usage limit has reset. Carry on where you left off."
@@ -165,7 +167,7 @@ func (h *Hub) waiting(a *Agent, at time.Time) {
 func (h *Hub) watchLimits() {
 	for range time.Tick(limitTick) {
 		a := dueWaiting(append(h.Agents(), h.Dispatcher), clock())
-		if a == nil || !readLoad().calm() {
+		if a == nil || !platform.ReadLoad().Calm() {
 			continue
 		}
 		h.report(a, "is resuming now that its usage limit has reset")

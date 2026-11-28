@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"switchboard/widget"
 )
 
 func widgetArgs(t *testing.T, js string) map[string]any {
@@ -19,44 +21,6 @@ func widgetArgs(t *testing.T, js string) map[string]any {
 		t.Fatal(err)
 	}
 	return m
-}
-
-func TestShowWidgetRefusesInputOutsideTheSchemaAndLimits(t *testing.T) {
-	rows := make([]string, widgetMaxRows+1)
-	for i := range rows {
-		rows[i] = `{"cells":["x"]}`
-	}
-	cases := map[string]string{
-		"unknown kind":           `{"kind":"iframe"}`,
-		"missing block":          `{"kind":"table"}`,
-		"bad id":                 `{"id":"Deploy!","kind":"keyvalue","keyvalue":{"items":[{"key":"a","value":"b"}]}}`,
-		"hex tone":               `{"kind":"keyvalue","keyvalue":{"items":[{"key":"a","value":"b","tone":"#ff0000"}]}}`,
-		"too many rows":          `{"kind":"table","table":{"columns":[{"title":"a"}],"rows":[` + strings.Join(rows, ",") + `]}}`,
-		"more cells than cols":   `{"kind":"table","table":{"columns":[{"title":"a"}],"rows":[{"cells":["1","2"]}]}}`,
-		"progress over one":      `{"kind":"progress","progress":{"bars":[{"label":"a","value":1.5}]}}`,
-		"seven buttons":          `{"kind":"buttons","buttons":{"buttons":[{"label":"1"},{"label":"2"},{"label":"3"},{"label":"4"},{"label":"5"},{"label":"6"},{"label":"7"}]}}`,
-		"duplicate buttons":      `{"kind":"buttons","buttons":{"buttons":[{"label":"Go"},{"label":"Go"}]}}`,
-		"choice default missing": `{"kind":"form","form":{"fields":[{"name":"env","label":"Env","kind":"choice","options":["dev"],"default":"prod"}]}}`,
-		"checkbox field":         `{"kind":"form","form":{"fields":[{"name":"ok","label":"OK","kind":"checkbox"}]}}`,
-		"series lengths differ":  `{"kind":"chart","chart":{"type":"line","series":[{"values":[1,2]},{"values":[1]}]}}`,
-		"three series":           `{"kind":"chart","chart":{"type":"bar","series":[{"values":[1]},{"values":[1]},{"values":[1]}]}}`,
-	}
-	for name, js := range cases {
-		if _, err := parseWidget(widgetArgs(t, js)); err == nil {
-			t.Errorf("%s was accepted", name)
-		}
-	}
-	big := `{"kind":"keyvalue","keyvalue":{"items":[{"key":"a","value":"` + strings.Repeat("x", widgetMaxBytes) + `"}]}}`
-	if _, err := parseWidget(widgetArgs(t, big)); err == nil || !strings.Contains(err.Error(), "64 KB") {
-		t.Errorf("a widget over 64 KB gave %v", err)
-	}
-	w, err := parseWidget(widgetArgs(t, `{"kind":"table","table":{"columns":[{"title":"a"},{"title":"b"}],"rows":[{"cells":["`+strings.Repeat("y", 300)+`"]}]}}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c := w.Table.Rows[0].Cells; len(c) != 2 || len([]rune(c[0])) != widgetMaxCell {
-		t.Errorf("a long short row became %d cells, the first %d characters", len(c), len([]rune(c[0])))
-	}
 }
 
 func TestAWidgetIsReplacedByIdAndLocksOnceAnswered(t *testing.T) {
@@ -74,8 +38,8 @@ func TestAWidgetIsReplacedByIdAndLocksOnceAnswered(t *testing.T) {
 		t.Fatalf("replacing made %d entries", len(s.Entries))
 	}
 
-	a.AnswerWidget("ship", WidgetAnswer{Clicked: "Ship it"})
-	a.AnswerWidget("ship", WidgetAnswer{Clicked: "Ship it"})
+	a.AnswerWidget("ship", widget.Answer{Clicked: "Ship it"})
+	a.AnswerWidget("ship", widget.Answer{Clicked: "Ship it"})
 	s = a.Snapshot()
 	if got := d.delivered(); len(got) != 1 || got[0] != `<switchboard-widget id="ship" kind="buttons">{"clicked":"Ship it"}</switchboard-widget>` {
 		t.Fatalf("the agent was sent %q", got)
@@ -97,7 +61,7 @@ func TestAWidgetIsReplacedByIdAndLocksOnceAnswered(t *testing.T) {
 func TestAConversationHoldsAtMostFiftyWidgets(t *testing.T) {
 	a, _ := stubAgent(t)
 	kv := `{"kind":"keyvalue","keyvalue":{"items":[{"key":"answer","value":"42"}]}}`
-	for i := range widgetMaxIDs {
+	for i := range widget.MaxIDs {
 		res, err := a.ShowWidget(widgetArgs(t, kv))
 		if err != nil || res != fmt.Sprintf("shown w%d", i+1) {
 			t.Fatalf("widget %d gave %q, %v", i+1, res, err)
@@ -117,7 +81,7 @@ func TestAClickDuringAPermissionPromptWaitsAndNeverDeniesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.event(func() bool { a.ask(&Pending{ReqID: "towel", Tool: "Bash"}); return true })
-	a.AnswerWidget("env", WidgetAnswer{Values: map[string]string{"env": "prod"}})
+	a.AnswerWidget("env", widget.Answer{Values: map[string]string{"env": "prod"}})
 	s := a.Snapshot()
 	if s.State != NeedsYou || len(s.Pending) != 1 {
 		t.Fatalf("the click changed the prompt: %s with %d pending", s.State, len(s.Pending))
@@ -141,7 +105,7 @@ func TestClearingAPendingClickMakesTheWidgetAnswerableAgain(t *testing.T) {
 	if _, err := a.ShowWidget(widgetArgs(t, `{"id":"go","kind":"buttons","buttons":{"buttons":[{"label":"Go"}]}}`)); err != nil {
 		t.Fatal(err)
 	}
-	a.AnswerWidget("go", WidgetAnswer{Clicked: "Go"})
+	a.AnswerWidget("go", widget.Answer{Clicked: "Go"})
 	s := a.Snapshot()
 	if len(s.Queued) != 1 {
 		t.Fatalf("%d pending", len(s.Queued))

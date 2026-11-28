@@ -8,6 +8,9 @@ import (
 
 	caution "github.com/nullentropy/caution"
 	"github.com/nullentropy/caution/wire"
+
+	"switchboard/platform"
+	"switchboard/uiscript"
 )
 
 const uiMaxNodes = 2000
@@ -35,7 +38,7 @@ type uiRenderer struct {
 	nodes int
 }
 
-func renderUI(v *View, act uiActor, root *uiNode, data map[string]any, session any) (out *caution.Node, err error) {
+func renderUI(v *View, act uiActor, root *uiscript.Node, data map[string]any, session any) (out *caution.Node, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			out, err = nil, fmt.Errorf("the interface failed while rendering: %v", p)
@@ -45,7 +48,7 @@ func renderUI(v *View, act uiActor, root *uiNode, data map[string]any, session a
 		return nil, fmt.Errorf("the slot is empty")
 	}
 	r := &uiRenderer{v: v, act: act}
-	nodes, err := r.expand(root, newUIScope(data, session))
+	nodes, err := r.expand(root, uiscript.NewScope(data, session))
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +61,7 @@ func renderUI(v *View, act uiActor, root *uiNode, data map[string]any, session a
 	return caution.VStack().Gap(0).Align("stretch").Kids(nodes...), nil
 }
 
-func uiDo(act uiActor, h *Hub, a uiAction) {
+func uiDo(act uiActor, h *Hub, a uiscript.Action) {
 	agent := func() *Agent {
 		for _, x := range h.Agents() {
 			if x.Meta.ID == a.Session {
@@ -67,7 +70,7 @@ func uiDo(act uiActor, h *Hub, a uiAction) {
 		}
 		return nil
 	}
-	if uiActions[a.Action] == uiArgSession {
+	if uiscript.Actions[a.Action] == uiscript.ArgSession {
 		if x := agent(); x != nil {
 			uiDoSession(act, x, a.Action)
 		}
@@ -134,11 +137,11 @@ func (r *uiRenderer) count(n *caution.Node) error {
 	return nil
 }
 
-func (r *uiRenderer) expand(n *uiNode, sc *uiScope) ([]*caution.Node, error) {
+func (r *uiRenderer) expand(n *uiscript.Node, sc *uiscript.Scope) ([]*caution.Node, error) {
 	if n == nil {
 		return nil, fmt.Errorf("null node")
 	}
-	scopes, err := sc.expand(n)
+	scopes, err := sc.Expand(n)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", n.Type, err)
 	}
@@ -153,8 +156,8 @@ func (r *uiRenderer) expand(n *uiNode, sc *uiScope) ([]*caution.Node, error) {
 	return out, nil
 }
 
-func (r *uiRenderer) node(n *uiNode, sc *uiScope) (*caution.Node, error) {
-	if uiComponents[n.Type] {
+func (r *uiRenderer) node(n *uiscript.Node, sc *uiscript.Scope) (*caution.Node, error) {
+	if uiscript.Components[n.Type] {
 		node, err := r.component(n, sc)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %v", n.Type, err)
@@ -167,13 +170,13 @@ func (r *uiRenderer) node(n *uiNode, sc *uiScope) (*caution.Node, error) {
 		}
 		return node, nil
 	}
-	if !uiNativeTypes[n.Type] {
+	if !uiscript.NativeTypes[n.Type] {
 		return nil, fmt.Errorf("unknown node type %q", n.Type)
 	}
-	if len(n.Kids) > 0 && !uiContainers[n.Type] {
+	if len(n.Kids) > 0 && !uiscript.Containers[n.Type] {
 		return nil, fmt.Errorf("%s cannot hold kids", n.Type)
 	}
-	text, err := sc.interp(n.Text)
+	text, err := sc.Interp(n.Text)
 	if err != nil {
 		return nil, fmt.Errorf("%s text: %v", n.Type, err)
 	}
@@ -245,7 +248,7 @@ func (r *uiRenderer) node(n *uiNode, sc *uiScope) (*caution.Node, error) {
 		}
 	}
 	if n.OnClick != nil {
-		a, err := sc.action(n.OnClick)
+		a, err := sc.Action(n.OnClick)
 		if err != nil {
 			return nil, fmt.Errorf("%s onClick: %v", n.Type, err)
 		}
@@ -254,7 +257,7 @@ func (r *uiRenderer) node(n *uiNode, sc *uiScope) (*caution.Node, error) {
 	return node, nil
 }
 
-func (r *uiRenderer) clickable(node *caution.Node, typ string, a uiAction) (*caution.Node, error) {
+func (r *uiRenderer) clickable(node *caution.Node, typ string, a uiscript.Action) (*caution.Node, error) {
 	h := r.v.hub
 	act := r.act
 	run := func() { uiDo(act, h, a) }
@@ -338,26 +341,26 @@ func uiNaturalH(n *caution.Node) float64 {
 	return 0
 }
 
-func (r *uiRenderer) value(sc *uiScope, v any) (any, error) {
+func (r *uiRenderer) value(sc *uiscript.Scope, v any) (any, error) {
 	if v == nil {
 		return nil, nil
 	}
-	return sc.value(v)
+	return sc.Value(v)
 }
 
-func (r *uiRenderer) num(sc *uiScope, v any) (float64, bool, error) {
+func (r *uiRenderer) num(sc *uiscript.Scope, v any) (float64, bool, error) {
 	got, err := r.value(sc, v)
 	if err != nil || got == nil {
 		return 0, false, err
 	}
-	n, ok := uiNumber(got)
+	n, ok := uiscript.Number(got)
 	if !ok {
 		return 0, false, fmt.Errorf("%v is not a number", got)
 	}
 	return n, true, nil
 }
 
-func (r *uiRenderer) str(sc *uiScope, v any) (string, error) {
+func (r *uiRenderer) str(sc *uiscript.Scope, v any) (string, error) {
 	got, err := r.value(sc, v)
 	if err != nil || got == nil {
 		return "", err
@@ -388,7 +391,7 @@ func uiAnchorOf(s string) (caution.A, bool) {
 	return caution.A{}, false
 }
 
-func (r *uiRenderer) sizeProps(node *caution.Node, n *uiNode, sc *uiScope) error {
+func (r *uiRenderer) sizeProps(node *caution.Node, n *uiscript.Node, sc *uiscript.Scope) error {
 	for _, k := range []string{"width", "height", "fill"} {
 		v, ok, err := r.num(sc, n.Props[k])
 		if err != nil {
@@ -418,7 +421,7 @@ func (r *uiRenderer) sizeProps(node *caution.Node, n *uiNode, sc *uiScope) error
 	return nil
 }
 
-func (r *uiRenderer) props(node, holder *caution.Node, n *uiNode, sc *uiScope) error {
+func (r *uiRenderer) props(node, holder *caution.Node, n *uiscript.Node, sc *uiscript.Scope) error {
 	if err := r.sizeProps(node, n, sc); err != nil {
 		return err
 	}
@@ -460,13 +463,13 @@ func (r *uiRenderer) props(node, holder *caution.Node, n *uiNode, sc *uiScope) e
 		strs[k] = s
 	}
 	if s := strs["align"]; s != "" {
-		if !uiAligns[s] {
+		if !uiscript.Aligns[s] {
 			return fmt.Errorf("align %q is not start, center, end or stretch", s)
 		}
 		inner.Align(caution.Align(s))
 	}
 	for _, k := range []string{"bg", "color", "border"} {
-		if s := strs[k]; s != "" && !uiHex.MatchString(s) && !uiTokRef.MatchString(s) {
+		if s := strs[k]; s != "" && !uiscript.Hex.MatchString(s) && !uiscript.TokRef.MatchString(s) {
 			return fmt.Errorf("%s %q is not a theme token or #rrggbb", k, s)
 		}
 	}
@@ -497,7 +500,7 @@ func (r *uiRenderer) props(node, holder *caution.Node, n *uiNode, sc *uiScope) e
 	return nil
 }
 
-func (r *uiRenderer) agent(n *uiNode, sc *uiScope) (*Agent, error) {
+func (r *uiRenderer) agent(n *uiscript.Node, sc *uiscript.Scope) (*Agent, error) {
 	id, err := r.str(sc, n.Props["session"])
 	if err != nil {
 		return nil, err
@@ -513,7 +516,7 @@ func (r *uiRenderer) agent(n *uiNode, sc *uiScope) (*Agent, error) {
 	return nil, fmt.Errorf("no session %q", id)
 }
 
-func (r *uiRenderer) component(n *uiNode, sc *uiScope) (*caution.Node, error) {
+func (r *uiRenderer) component(n *uiscript.Node, sc *uiscript.Scope) (*caution.Node, error) {
 	switch n.Type {
 	case "sb.inbox":
 		return r.inbox(sc)
@@ -608,9 +611,9 @@ func (r *uiRenderer) activity(a *Agent, s Snapshot) *caution.Node {
 	return row
 }
 
-func (r *uiRenderer) inbox(sc *uiScope) (*caution.Node, error) {
-	list, _, _ := sc.lookup("groups.need")
-	rows, _ := uiItems(list)
+func (r *uiRenderer) inbox(sc *uiscript.Scope) (*caution.Node, error) {
+	list, _, _ := sc.Lookup("groups.need")
+	rows, _ := uiscript.Items(list)
 	byID := map[string]*Agent{}
 	for _, a := range r.v.hub.Agents() {
 		byID[a.Meta.ID] = a
@@ -634,7 +637,7 @@ func (r *uiRenderer) inbox(sc *uiScope) (*caution.Node, error) {
 		}
 		t := newTile(r.v, a)
 		t.update(a.Snapshot())
-		if k, ok := uiNumber(m["key"]); ok {
+		if k, ok := uiscript.Number(m["key"]); ok {
 			t.setBadge(int(k))
 		}
 		switch {
@@ -651,14 +654,14 @@ func (r *uiRenderer) inbox(sc *uiScope) (*caution.Node, error) {
 		body.Add(caution.Panel().H(40).Bg("$panel").Radius(10).Border("$edgeSoft", 1).Kids(
 			caution.Glass().HoverFill("$hover").Anchor(fill()).OnPick(func(_, _ float64, _ *caution.Node) { act.uiNextWaiting() }),
 			caution.HStack().Gap(8).Align("center").Anchor(caution.A{Left: px(16), CenterY: px(0)}).Kids(
-				caution.Label(fmt.Sprintf("%d more waiting", shown-5)).FontSize(13).Color("$inkDim"), kbd(modLabel+"J")),
+				caution.Label(fmt.Sprintf("%d more waiting", shown-5)).FontSize(13).Color("$inkDim"), kbd(platform.ModLabel+"J")),
 		))
 	}
 	head := caution.HStack().Gap(8).Align("center").Kids(
 		caution.Label("NEEDS YOU").FontSize(11).Weight(650).Color("$inkDim"),
 		caution.Label(fmt.Sprint(shown)).FontSize(11).Weight(600).Color("$inkFaint"),
 		caution.Panel().Fill(1),
-		hints([][2]string{{"A  " + modLabel + "Y", "allow"}, {"D  " + shiftLabel + modLabel + "D", "deny"}, {shiftLabel + "A  " + shiftLabel + modLabel + "Y", "always"}, {modLabel + "J", "next"}, {"Enter", "open"}}),
+		hints([][2]string{{"A  " + platform.ModLabel + "Y", "allow"}, {"D  " + platform.ShiftLabel + platform.ModLabel + "D", "deny"}, {platform.ShiftLabel + "A  " + platform.ShiftLabel + platform.ModLabel + "Y", "always"}, {platform.ModLabel + "J", "next"}, {"Enter", "open"}}),
 	)
 	return box.Kids(head, body), nil
 }

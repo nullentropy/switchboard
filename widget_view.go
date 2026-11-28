@@ -8,6 +8,8 @@ import (
 	"time"
 
 	caution "github.com/nullentropy/caution"
+
+	"switchboard/widget"
 )
 
 const widgetRedraw = 250 * time.Millisecond
@@ -68,10 +70,10 @@ func (f *focusView) drawWidget(sh *shown, e Entry) {
 	sh.wid = e.Widget.ID
 	sh.body.Clear()
 	a := f.a
-	sh.body.Add(widgetCard(e, func(ans WidgetAnswer) { go a.AnswerWidget(e.Widget.ID, ans) }))
+	sh.body.Add(widgetCard(e, func(ans widget.Answer) { go a.AnswerWidget(e.Widget.ID, ans) }))
 }
 
-func widgetCard(e Entry, answer func(WidgetAnswer)) *caution.Node {
+func widgetCard(e Entry, answer func(widget.Answer)) *caution.Node {
 	w := e.Widget
 	card := caution.VStack().Gap(10).Pad(14).Align("stretch").Border("$edge", 1).Radius(8)
 	if w.Title != "" {
@@ -96,11 +98,11 @@ func widgetCard(e Entry, answer func(WidgetAnswer)) *caution.Node {
 	return card
 }
 
-func shaderWidget(s *WShader) *caution.Node {
+func shaderWidget(s *widget.Shader) *caution.Node {
 	return caution.Shader(caution.FX{Frag: s.Frag, Animate: s.Animate, Uniforms: s.Uniforms}).H(s.Height).Radius(4).Clips()
 }
 
-func tableWidget(t *WTable) *caution.Node {
+func tableWidget(t *widget.Table) *caution.Node {
 	cols := make([]caution.GridCol, len(t.Columns))
 	for i, c := range t.Columns {
 		cols[i] = caution.GridCol{Weight: 1, Align: map[bool]caution.Align{true: caution.AlignEnd, false: caution.AlignStart}[c.Align == "right"]}
@@ -131,7 +133,7 @@ func meter(frac float64, color string, h float64) *caution.Node {
 		caution.Panel().Fill(math.Max(1-frac, 1e-4)).H(h))
 }
 
-func progressWidget(p *WProgress) *caution.Node {
+func progressWidget(p *widget.Progress) *caution.Node {
 	col := caution.VStack().Gap(10).Align("stretch")
 	for _, b := range p.Bars {
 		col.Add(caution.VStack().Gap(4).Align("stretch").Kids(
@@ -143,7 +145,7 @@ func progressWidget(p *WProgress) *caution.Node {
 	return col
 }
 
-func keyValueWidget(k *WKeyValue) *caution.Node {
+func keyValueWidget(k *widget.KeyValue) *caution.Node {
 	g := caution.Grid([]caution.GridCol{{}, {Weight: 1}}).ColGap(16).RowGap(6)
 	for _, it := range k.Items {
 		g.Add(wtext(it.Key, 13, "$inkDim", false))
@@ -152,7 +154,7 @@ func keyValueWidget(k *WKeyValue) *caution.Node {
 	return g
 }
 
-func seriesColor(s WSeries, i int) string {
+func seriesColor(s widget.Series, i int) string {
 	return toneColor(s.Tone, []string{"$accent", "$phRead"}[i%2])
 }
 
@@ -164,7 +166,7 @@ func fmtNum(v float64, unit string) string {
 	return s + unit
 }
 
-func chartWidget(c *WChart) *caution.Node {
+func chartWidget(c *widget.Chart) *caution.Node {
 	col := caution.VStack().Gap(10).Align("stretch")
 	if len(c.Series) > 1 || c.Series[0].Name != "" {
 		legend := caution.HStack().Gap(14).Align("center")
@@ -234,7 +236,7 @@ func chartWidget(c *WChart) *caution.Node {
 	return col
 }
 
-func buttonsWidget(b *WButtons, ans *WidgetAnswer, answer func(WidgetAnswer)) *caution.Node {
+func buttonsWidget(b *widget.Buttons, ans *widget.Answer, answer func(widget.Answer)) *caution.Node {
 	col := caution.VStack().Gap(10).Align("stretch")
 	if b.Prompt != "" {
 		col.Add(wtext(b.Prompt, 13, "$ink", false))
@@ -250,7 +252,7 @@ func buttonsWidget(b *WButtons, ans *WidgetAnswer, answer func(WidgetAnswer)) *c
 		btn := caution.Button(label).OnClick(func() {
 			if !sent {
 				sent = true
-				answer(WidgetAnswer{Clicked: label})
+				answer(widget.Answer{Clicked: label})
 			}
 		})
 		if c := toneColor(x.Tone, ""); c != "" {
@@ -261,7 +263,7 @@ func buttonsWidget(b *WButtons, ans *WidgetAnswer, answer func(WidgetAnswer)) *c
 	return col.Add(row)
 }
 
-func formWidget(fm *WForm, ans *WidgetAnswer, answer func(WidgetAnswer)) *caution.Node {
+func formWidget(fm *widget.Form, ans *widget.Answer, answer func(widget.Answer)) *caution.Node {
 	g := caution.Grid([]caution.GridCol{{}, {Weight: 1}}).ColGap(14).RowGap(8)
 	if ans != nil {
 		for _, x := range fm.Fields {
@@ -293,7 +295,7 @@ func formWidget(fm *WForm, ans *WidgetAnswer, answer func(WidgetAnswer)) *cautio
 		for _, x := range fm.Fields {
 			out[x.Name] = vals[x.Name]
 		}
-		answer(WidgetAnswer{Values: out})
+		answer(widget.Answer{Values: out})
 	}
 	for _, x := range fm.Fields {
 		name := x.Name

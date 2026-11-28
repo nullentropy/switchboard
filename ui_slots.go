@@ -7,12 +7,14 @@ import (
 	"sort"
 
 	caution "github.com/nullentropy/caution"
+
+	"switchboard/uiscript"
 )
 
 type uiMount struct {
 	name  string
 	raw   string
-	slots map[string]*uiNode
+	slots map[string]*uiscript.Node
 	err   string
 	tick  bool
 	inbox bool
@@ -35,7 +37,7 @@ func (v *View) loadUI() bool {
 		return false
 	}
 	m := &uiMount{name: name, raw: string(raw)}
-	if ui, errs := parseUI(raw); len(errs) > 0 {
+	if ui, errs := uiscript.Parse(raw); len(errs) > 0 {
 		m.err = errs[0]
 		if len(errs) > 1 {
 			m.err += fmt.Sprintf(" (and %d more)", len(errs)-1)
@@ -49,7 +51,7 @@ func (v *View) loadUI() bool {
 	return true
 }
 
-func uiHasType(n *uiNode, typ string) bool {
+func uiHasType(n *uiscript.Node, typ string) bool {
 	if n == nil {
 		return false
 	}
@@ -64,7 +66,7 @@ func uiHasType(n *uiNode, typ string) bool {
 	return false
 }
 
-func (v *View) uiSlot(slot string) *uiNode {
+func (v *View) uiSlot(slot string) *uiscript.Node {
 	if v.ui == nil {
 		return nil
 	}

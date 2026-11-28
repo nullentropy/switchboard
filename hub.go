@@ -13,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"switchboard/update"
 )
 
 type Settings struct {
@@ -64,7 +66,7 @@ type Hub struct {
 	updateTag    string
 	updateAsked  bool
 	restart      func() error
-	updater      *updater
+	updater      *update.Updater
 	stageMu      sync.Mutex
 	mcp          *mcpServer
 	uiStarts     int

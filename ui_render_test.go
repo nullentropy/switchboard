@@ -11,7 +11,33 @@ import (
 
 	caution "github.com/nullentropy/caution"
 	"github.com/nullentropy/caution/wire"
+
+	"switchboard/uiscript"
 )
+
+const uiDocExample = `{
+  "name": "Compact wall",
+  "slots": {
+    "board": {
+      "type": "vstack", "props": {"gap": 12, "pad": 24},
+      "kids": [
+        {"type": "sb.inbox"},
+        {"type": "grid", "props": {"columns": 4, "gap": 10},
+         "each": "groups.work", "as": "s",
+         "kids": [{"type": "sb.tile", "props": {"session": "{{s.id}}"}}]}
+      ]
+    },
+    "railRow": {
+      "type": "hstack", "props": {"gap": 6, "align": "center"},
+      "onClick": {"action": "open_session", "session": "{{s.id}}"},
+      "kids": [
+        {"type": "sb.stateDot", "props": {"session": "{{s.id}}"}},
+        {"type": "label", "text": "{{s.title}}", "props": {"color": "$ink"}},
+        {"type": "label", "if": "s.cost > 1", "text": "${{s.cost}}", "props": {"color": "$inkFaint"}}
+      ]
+    }
+  }
+}`
 
 type uiCall struct {
 	name, arg string
@@ -80,16 +106,16 @@ func (w *uiWorld) row(a *Agent) map[string]any {
 	return nil
 }
 
-func uiParse(t *testing.T, src string) *uiInterface {
+func uiParse(t *testing.T, src string) *uiscript.Interface {
 	t.Helper()
-	ui, errs := parseUI([]byte(src))
+	ui, errs := uiscript.Parse([]byte(src))
 	if len(errs) > 0 {
 		t.Fatalf("parse: %v", errs)
 	}
 	return ui
 }
 
-func (w *uiWorld) render(t *testing.T, ui *uiInterface, slot string, session any) *caution.Node {
+func (w *uiWorld) render(t *testing.T, ui *uiscript.Interface, slot string, session any) *caution.Node {
 	t.Helper()
 	n, err := renderUI(w.v, w.act, ui.Slots[slot], w.data(), session)
 	if err != nil {
@@ -420,8 +446,8 @@ func TestUIRenderEveryActionReachesTheActor(t *testing.T) {
 		{"remove_session", `"session": "{{s.id}}"`, uiCall{"remove_session", "Arthur Dent"}},
 		{"mark_goal_done", `"goal": "{{s.goal}}"`, uiCall{"mark_goal_done", "Find the Question"}},
 	}
-	if len(cases) != len(uiActions) {
-		t.Fatalf("%d cases for %d actions", len(cases), len(uiActions))
+	if len(cases) != len(uiscript.Actions) {
+		t.Fatalf("%d cases for %d actions", len(cases), len(uiscript.Actions))
 	}
 	for _, typ := range []string{"button", "label", "panel", "glass", "hstack"} {
 		for _, c := range cases {
@@ -432,7 +458,7 @@ func TestUIRenderEveryActionReachesTheActor(t *testing.T) {
 					click += ", " + c.arg
 				}
 				text := ""
-				if uiTextTypes[typ] {
+				if uiscript.TextTypes[typ] {
 					text = `"text": "Go", `
 				}
 				ui := uiParse(t, `{"name": "Guide", "slots": {"tile": {"type": "`+typ+`", `+text+`"props": {"height": 20}, "onClick": `+click+`}}}}`)
@@ -516,14 +542,14 @@ func TestUIRenderErrors(t *testing.T) {
 	w := uiRenderFixture(t)
 	cases := []struct {
 		name string
-		node *uiNode
+		node *uiscript.Node
 		want string
 	}{
-		{"unknown type", &uiNode{Type: "terminal"}, `unknown node type "terminal"`},
-		{"unknown session", &uiNode{Type: "sb.tile", Props: map[string]any{"session": "Agrajag"}}, `no session "Agrajag"`},
-		{"kids on a label", &uiNode{Type: "label", Kids: []*uiNode{{Type: "label"}}}, "label cannot hold kids"},
-		{"bad colour", &uiNode{Type: "panel", Props: map[string]any{"bg": "red"}}, "not a theme token"},
-		{"compare text with <", &uiNode{Type: "label", If: "s.title < 3"}, "compares numbers only"},
+		{"unknown type", &uiscript.Node{Type: "terminal"}, `unknown node type "terminal"`},
+		{"unknown session", &uiscript.Node{Type: "sb.tile", Props: map[string]any{"session": "Agrajag"}}, `no session "Agrajag"`},
+		{"kids on a label", &uiscript.Node{Type: "label", Kids: []*uiscript.Node{{Type: "label"}}}, "label cannot hold kids"},
+		{"bad colour", &uiscript.Node{Type: "panel", Props: map[string]any{"bg": "red"}}, "not a theme token"},
+		{"compare text with <", &uiscript.Node{Type: "label", If: "s.title < 3"}, "compares numbers only"},
 		{"empty slot", nil, "the slot is empty"},
 	}
 	for _, c := range cases {

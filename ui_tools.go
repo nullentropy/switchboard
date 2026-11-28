@@ -6,6 +6,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+
+	"switchboard/uiscript"
 )
 
 var uiSlotRoles = map[string]string{
@@ -25,28 +27,28 @@ var uiComponentRoles = map[string]string{
 	"sb.limits":   "the usage limits bar",
 }
 
-var uiPropKindDocs = map[uiPropKind]string{
-	uiPNum:      "number",
-	uiPBool:     "true or false",
-	uiPColour:   "colour: a theme token such as $accent, or #rrggbb",
-	uiPText:     "text, may hold {{path}}",
-	uiPAlign:    "start, center, end or stretch",
-	uiPAnchor:   "fill, center, top, bottom, left or right",
-	uiPColumns:  "number of columns",
-	uiPFraction: "number from 0 to 1",
-	uiPDataURI:  "image data URI",
+var uiPropKindDocs = map[uiscript.PropKind]string{
+	uiscript.PropNum:      "number",
+	uiscript.PropBool:     "true or false",
+	uiscript.PropColour:   "colour: a theme token such as $accent, or #rrggbb",
+	uiscript.PropText:     "text, may hold {{path}}",
+	uiscript.PropAlign:    "start, center, end or stretch",
+	uiscript.PropAnchor:   "fill, center, top, bottom, left or right",
+	uiscript.PropColumns:  "number of columns",
+	uiscript.PropFraction: "number from 0 to 1",
+	uiscript.PropDataURI:  "image data URI",
 }
 
 var uiToolDefs = []map[string]any{
 	{"name": "get_ui", "description": "Switchboard's scripted interfaces. Without a name: the format, the slots, the data fields, the actions, the built-in components, every saved interface and which one is on. With a name: that interface's JSON.",
 		"inputSchema": obj(map[string]any{"name": strProp("A saved interface's name, to get its JSON.")})},
-	{"name": "save_ui", "description": fmt.Sprintf("Save an interface for Switchboard's window and switch to it. It is checked, then every slot is rendered against the current data off screen; any error refuses the save and is returned. At most %d interfaces and %d KB each. Saving an existing name replaces it. %s is reserved.", uiMaxInterfaces, uiMaxBytes>>10, uiDefaultName),
+	{"name": "save_ui", "description": fmt.Sprintf("Save an interface for Switchboard's window and switch to it. It is checked, then every slot is rendered against the current data off screen; any error refuses the save and is returned. At most %d interfaces and %d KB each. Saving an existing name replaces it. %s is reserved.", uiscript.MaxInterfaces, uiscript.MaxBytes>>10, uiscript.DefaultName),
 		"inputSchema": obj(map[string]any{
 			"interface": map[string]any{"type": "object", "description": "The interface: {\"name\": ..., \"slots\": {...}} in the format get_ui describes."},
 		}, "interface")},
-	{"name": "use_ui", "description": fmt.Sprintf("Switch Switchboard's window to a saved interface, or to %s.", uiDefaultName),
-		"inputSchema": obj(map[string]any{"name": strProp(fmt.Sprintf("A saved interface's name, or %s.", uiDefaultName))}, "name")},
-	{"name": "delete_ui", "description": fmt.Sprintf("Delete a saved interface. Deleting the one that is on switches to %s.", uiDefaultName),
+	{"name": "use_ui", "description": fmt.Sprintf("Switch Switchboard's window to a saved interface, or to %s.", uiscript.DefaultName),
+		"inputSchema": obj(map[string]any{"name": strProp(fmt.Sprintf("A saved interface's name, or %s.", uiscript.DefaultName))}, "name")},
+	{"name": "delete_ui", "description": fmt.Sprintf("Delete a saved interface. Deleting the one that is on switches to %s.", uiscript.DefaultName),
 		"inputSchema": obj(map[string]any{"name": strProp("The saved interface's name.")}, "name")},
 }
 
@@ -57,8 +59,8 @@ func (m *mcpServer) uiCall(name string, args map[string]any) (string, error) {
 	switch name {
 	case "get_ui":
 		if title != "" {
-			if strings.EqualFold(title, uiDefaultName) {
-				return "", fmt.Errorf("%s is built into Switchboard and has no JSON", uiDefaultName)
+			if strings.EqualFold(title, uiscript.DefaultName) {
+				return "", fmt.Errorf("%s is built into Switchboard and has no JSON", uiscript.DefaultName)
 			}
 			raw, ok := set.Interfaces[title]
 			if !ok {
@@ -73,7 +75,7 @@ func (m *mcpServer) uiCall(name string, args map[string]any) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		ui, errs := parseUI(raw)
+		ui, errs := uiscript.Parse(raw)
 		if len(errs) > 0 {
 			return "", fmt.Errorf("%s", strings.Join(errs, "; "))
 		}
@@ -82,7 +84,7 @@ func (m *mcpServer) uiCall(name string, args map[string]any) (string, error) {
 		for k := range set.Interfaces {
 			saved[k] = ""
 		}
-		if err := checkUIName(title, saved); err != nil {
+		if err := uiscript.CheckName(title, saved); err != nil {
 			return "", err
 		}
 		if errs := m.uiDryRender(ui); len(errs) > 0 {
@@ -101,9 +103,9 @@ func (m *mcpServer) uiCall(name string, args map[string]any) (string, error) {
 		if title == "" {
 			return "", fmt.Errorf("a name is required")
 		}
-		if strings.EqualFold(title, uiDefaultName) {
+		if strings.EqualFold(title, uiscript.DefaultName) {
 			m.hub.UseUI(func(s *Settings) { s.Interface = "" })
-			return fmt.Sprintf("Switched to %s.", uiDefaultName), nil
+			return fmt.Sprintf("Switched to %s.", uiscript.DefaultName), nil
 		}
 		if _, ok := set.Interfaces[title]; !ok {
 			return "", fmt.Errorf("no interface called %s", title)
@@ -111,8 +113,8 @@ func (m *mcpServer) uiCall(name string, args map[string]any) (string, error) {
 		m.hub.UseUI(func(s *Settings) { s.Interface = title })
 		return fmt.Sprintf("Switched to %s.", title), nil
 	case "delete_ui":
-		if strings.EqualFold(title, uiDefaultName) {
-			return "", fmt.Errorf("%s is built in and cannot be deleted", uiDefaultName)
+		if strings.EqualFold(title, uiscript.DefaultName) {
+			return "", fmt.Errorf("%s is built in and cannot be deleted", uiscript.DefaultName)
 		}
 		if _, ok := set.Interfaces[title]; !ok {
 			return "", fmt.Errorf("no interface called %s", title)
@@ -127,7 +129,7 @@ func (m *mcpServer) uiCall(name string, args map[string]any) (string, error) {
 			}
 		})
 		if wasOn {
-			return fmt.Sprintf("Deleted %s and switched to %s.", title, uiDefaultName), nil
+			return fmt.Sprintf("Deleted %s and switched to %s.", title, uiscript.DefaultName), nil
 		}
 		return fmt.Sprintf("Deleted %s.", title), nil
 	}
@@ -168,14 +170,14 @@ func (uiDryActor) uiStopSession(*Agent)        {}
 func (uiDryActor) uiRemoveSession(*Agent)      {}
 func (uiDryActor) uiMarkGoalDone(string)       {}
 
-func (m *mcpServer) uiDryRender(ui *uiInterface) []string {
+func (m *mcpServer) uiDryRender(ui *uiscript.Interface) []string {
 	v := &View{hub: m.hub, set: m.hub.Settings(), tiles: map[*Agent]*tile{}}
 	data := uiData(m.hub, uiViewState{Columns: 3, Width: 1400})
-	rows, _ := uiItems(data["sessions"])
+	rows, _ := uiscript.Items(data["sessions"])
 	var errs []string
 	for _, slot := range slices.Sorted(maps.Keys(ui.Slots)) {
 		root := ui.Slots[slot]
-		if !uiSessionSlots[slot] {
+		if !uiscript.SessionSlots[slot] {
 			if _, err := renderUI(v, uiDryActor{}, root, data, nil); err != nil {
 				errs = append(errs, fmt.Sprintf("slots.%s: %v", slot, err))
 			}
@@ -196,14 +198,14 @@ func (m *mcpServer) uiGuide(set Settings) map[string]any {
 	active, _ := m.hub.ActiveUI()
 	on := set.Interface
 	if on == "" {
-		on = uiDefaultName
+		on = uiscript.DefaultName
 	}
 	if active == "" {
-		active = uiDefaultName
+		active = uiscript.DefaultName
 	}
 	var saved []map[string]any
 	for _, n := range slices.Sorted(maps.Keys(set.Interfaces)) {
-		var ui uiInterface
+		var ui uiscript.Interface
 		_ = json.Unmarshal(set.Interfaces[n], &ui)
 		saved = append(saved, map[string]any{"name": n, "on": n == set.Interface, "bytes": len(set.Interfaces[n]), "slots": slices.Sorted(maps.Keys(ui.Slots))})
 	}
@@ -212,31 +214,31 @@ func (m *mcpServer) uiGuide(set Settings) map[string]any {
 		slots = append(slots, map[string]string{"slot": s, "replaces": uiSlotRoles[s]})
 	}
 	props := map[string]string{}
-	for k, kind := range uiCommonProps {
+	for k, kind := range uiscript.CommonProps {
 		props[k] = uiPropKindDocs[kind]
 	}
 	typeProps := map[string]map[string]string{}
-	for t, ps := range uiTypeProps {
+	for t, ps := range uiscript.TypeProps {
 		typeProps[t] = map[string]string{}
 		for k, kind := range ps {
 			typeProps[t][k] = uiPropKindDocs[kind]
 		}
 	}
 	var actions []map[string]string
-	for _, a := range slices.Sorted(maps.Keys(uiActions)) {
+	for _, a := range slices.Sorted(maps.Keys(uiscript.Actions)) {
 		arg := ""
-		switch uiActions[a] {
-		case uiArgSession:
+		switch uiscript.Actions[a] {
+		case uiscript.ArgSession:
 			arg = "session"
-		case uiArgGoal:
+		case uiscript.ArgGoal:
 			arg = "goal"
 		}
 		actions = append(actions, map[string]string{"action": a, "takes": arg})
 	}
 	var comps []map[string]any
-	for _, c := range slices.Sorted(maps.Keys(uiComponents)) {
-		props := slices.Sorted(maps.Keys(uiSizeProps))
-		if uiComponentNeedsSession[c] {
+	for _, c := range slices.Sorted(maps.Keys(uiscript.Components)) {
+		props := slices.Sorted(maps.Keys(uiscript.SizeProps))
+		if uiscript.ComponentNeedsSession[c] {
 			props = append(props, "session")
 		}
 		comps = append(comps, map[string]any{"type": c, "draws": uiComponentRoles[c], "props": props})
@@ -248,37 +250,37 @@ func (m *mcpServer) uiGuide(set Settings) map[string]any {
 		"format": map[string]any{
 			"interface":  `{"name": "...", "slots": {"<slot>": <node>}}`,
 			"node":       `{"type", "props", "kids", "text", "each", "as", "if", "onClick"}`,
-			"types":      slices.Sorted(maps.Keys(uiNativeTypes)),
-			"containers": slices.Sorted(maps.Keys(uiContainers)),
-			"textTypes":  slices.Sorted(maps.Keys(uiTextTypes)),
+			"types":      slices.Sorted(maps.Keys(uiscript.NativeTypes)),
+			"containers": slices.Sorted(maps.Keys(uiscript.Containers)),
+			"textTypes":  slices.Sorted(maps.Keys(uiscript.TextTypes)),
 			"props":      props,
 			"typeProps":  typeProps,
 			"bindings":   "{{path}} puts a value in a string. each names a list path and repeats the node once per item, bound to the name in as. if keeps the node when a condition holds: a path, !path, or a path compared to a number or quoted string with ==, !=, < or >, joined with && or ||.",
 			"onClick":    `{"action": "...", "session": "{{s.id}}"} or {"action": "...", "goal": "..."}`,
-			"limits":     fmt.Sprintf("%d KB per interface, %d interfaces, %d nodes per rendered slot", uiMaxBytes>>10, uiMaxInterfaces, uiMaxNodes),
+			"limits":     fmt.Sprintf("%d KB per interface, %d interfaces, %d nodes per rendered slot", uiscript.MaxBytes>>10, uiscript.MaxInterfaces, uiMaxNodes),
 		},
 		"slots":      slots,
-		"data":       uiFieldDoc(uiRootField),
+		"data":       uiFieldDoc(uiscript.RootField),
 		"actions":    actions,
 		"components": comps,
 	}
 }
 
-func uiFieldDoc(f *uiField) any {
-	switch f.kind {
-	case uiStr:
+func uiFieldDoc(f *uiscript.Field) any {
+	switch f.Kind {
+	case uiscript.Str:
 		return "text"
-	case uiNum:
+	case uiscript.Num:
 		return "number"
-	case uiMoney:
+	case uiscript.Money:
 		return "dollars"
-	case uiBool:
+	case uiscript.Bool:
 		return "bool"
-	case uiList:
-		return []any{uiFieldDoc(f.item)}
+	case uiscript.List:
+		return []any{uiFieldDoc(f.Item)}
 	}
 	out := map[string]any{}
-	for k, sub := range f.fields {
+	for k, sub := range f.Fields {
 		out[k] = uiFieldDoc(sub)
 	}
 	return out

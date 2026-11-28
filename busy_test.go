@@ -5,6 +5,8 @@ import (
 	"time"
 
 	caution "github.com/nullentropy/caution"
+
+	"switchboard/platform"
 )
 
 func painted(s, i int) canvas {
@@ -42,7 +44,7 @@ func TestSpriteFramesFollowTheTheme(t *testing.T) {
 
 func TestSpritePickHoldsForATurnAndNeverRepeatsNext(t *testing.T) {
 	reduceMotion = func() bool { return false }
-	defer func() { reduceMotion = osReduceMotion }()
+	defer func() { reduceMotion = platform.ReduceMotion }()
 	a := &Agent{}
 	turn := time.Now()
 	prev := pickSprite(a, turn, Settings{})
@@ -60,7 +62,7 @@ func TestSpritePickHoldsForATurnAndNeverRepeatsNext(t *testing.T) {
 
 func TestBusySpriteShowsOnlyWhileWorking(t *testing.T) {
 	reduceMotion = func() bool { return true }
-	defer func() { reduceMotion = osReduceMotion }()
+	defer func() { reduceMotion = platform.ReduceMotion }()
 	v := openView(&Agent{}, &Agent{})
 	f := v.focus
 	f.activity = caution.Label("")

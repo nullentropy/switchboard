@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"switchboard/uiscript"
 )
 
 func uiToolsFixture(t *testing.T) (*uiWorld, *mcpServer) {
@@ -58,7 +60,7 @@ func TestSaveUIStoresAndSwitchesToAValidInterface(t *testing.T) {
 	if name != "Heart of Gold" {
 		t.Fatalf("active %q", name)
 	}
-	if ui, errs := parseUI(raw); len(errs) > 0 || len(ui.Slots) != 2 {
+	if ui, errs := uiscript.Parse(raw); len(errs) > 0 || len(ui.Slots) != 2 {
 		t.Fatalf("stored %s: %v", raw, errs)
 	}
 
@@ -71,7 +73,7 @@ func TestSaveUIStoresAndSwitchesToAValidInterface(t *testing.T) {
 		t.Fatalf("replacing from a JSON string: %v", err)
 	}
 	_, raw = w.h.ActiveUI()
-	if ui, _ := parseUI(raw); ui.Slots["header"] == nil || ui.Slots["board"] != nil {
+	if ui, _ := uiscript.Parse(raw); ui.Slots["header"] == nil || ui.Slots["board"] != nil {
 		t.Fatalf("not replaced: %s", raw)
 	}
 	if n := len(w.h.Settings().Interfaces); n != 1 {
@@ -95,7 +97,7 @@ func TestSaveUIRefusesAnInvalidInterface(t *testing.T) {
 		}
 	}
 
-	big := fmt.Sprintf(`{"name": "Hyperspace Bypass", "slots": {"header": {"type": "label", "text": %q}}}`, strings.Repeat("4", uiMaxBytes))
+	big := fmt.Sprintf(`{"name": "Hyperspace Bypass", "slots": {"header": {"type": "label", "text": %q}}}`, strings.Repeat("4", uiscript.MaxBytes))
 	if _, err := m.uiCall("save_ui", map[string]any{"interface": big}); err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("oversized interface: %v", err)
 	}
@@ -109,7 +111,7 @@ func TestSaveUIRefusesAnInvalidInterface(t *testing.T) {
 		t.Fatal("missing interface accepted")
 	}
 
-	for i := range uiMaxInterfaces {
+	for i := range uiscript.MaxInterfaces {
 		if _, err := m.uiCall("save_ui", map[string]any{"interface": uiNamed(fmt.Sprintf("Planet %d", i))}); err != nil {
 			t.Fatal(err)
 		}
@@ -121,7 +123,7 @@ func TestSaveUIRefusesAnInvalidInterface(t *testing.T) {
 		t.Fatalf("replacing at the limit: %v", err)
 	}
 	set := w.h.Settings()
-	if _, ok := set.Interfaces["Vogon Poetry"]; ok || len(set.Interfaces) != uiMaxInterfaces || set.Interface != "Planet 3" {
+	if _, ok := set.Interfaces["Vogon Poetry"]; ok || len(set.Interfaces) != uiscript.MaxInterfaces || set.Interface != "Planet 3" {
 		t.Fatalf("saved %d, on %q", len(set.Interfaces), set.Interface)
 	}
 }
@@ -132,7 +134,7 @@ func TestSaveUIRefusesAnInterfaceThatFailsTheDryRender(t *testing.T) {
 		t.Fatal(err)
 	}
 	missing := `{"name": "Deep Thought", "slots": {"board": {"type": "sb.stateDot", "props": {"session": "Deep Thought"}}}}`
-	if _, errs := parseUI([]byte(missing)); len(errs) > 0 {
+	if _, errs := uiscript.Parse([]byte(missing)); len(errs) > 0 {
 		t.Fatalf("fixture should pass the checks: %v", errs)
 	}
 	_, err := m.uiCall("save_ui", map[string]any{"interface": missing})
@@ -300,14 +302,14 @@ func TestGetUIDescribesTheFormatAndReturnsSavedJSON(t *testing.T) {
 	for _, a := range g.Actions {
 		takes[a.Action] = a.Takes
 	}
-	if len(takes) != len(uiActions) || takes["open_session"] != "session" || takes["filter_goal"] != "goal" || takes["new_session"] != "" {
+	if len(takes) != len(uiscript.Actions) || takes["open_session"] != "session" || takes["filter_goal"] != "goal" || takes["new_session"] != "" {
 		t.Fatalf("actions %+v", g.Actions)
 	}
 	props := map[string][]string{}
 	for _, c := range g.Components {
 		props[c.Type] = c.Props
 	}
-	if len(props) != len(uiComponents) || !slices.Contains(props["sb.tile"], "session") || slices.Contains(props["sb.inbox"], "session") {
+	if len(props) != len(uiscript.Components) || !slices.Contains(props["sb.tile"], "session") || slices.Contains(props["sb.inbox"], "session") {
 		t.Fatalf("components %+v", g.Components)
 	}
 
@@ -315,7 +317,7 @@ func TestGetUIDescribesTheFormatAndReturnsSavedJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ui, errs := parseUI([]byte(one))
+	ui, errs := uiscript.Parse([]byte(one))
 	if len(errs) > 0 || ui.Name != "Heart of Gold" || ui.Slots["railRow"].OnClick.Action != "open_session" {
 		t.Fatalf("get_ui by name: %s %v", one, errs)
 	}

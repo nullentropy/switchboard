@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"switchboard/platform"
 )
 
 func uiFixture(t *testing.T) (*Hub, time.Time) {
@@ -13,9 +15,9 @@ func uiFixture(t *testing.T) (*Hub, time.Time) {
 	now := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
 	clock = func() time.Time { return now }
 	t.Cleanup(func() { clock = time.Now })
-	uiLoadRead = func() loadSample { return loadSample{Load1: 7.5, Load5: 4, Cores: 10, MemFree: 42} }
+	uiLoadRead = func() platform.Load { return platform.Load{Load1: 7.5, Load5: 4, Cores: 10, MemFree: 42} }
 	uiLoadAt = time.Time{}
-	t.Cleanup(func() { uiLoadRead = readLoad; uiLoadAt = time.Time{} })
+	t.Cleanup(func() { uiLoadRead = platform.ReadLoad; uiLoadAt = time.Time{} })
 	return newHub(map[string]string{}, filepath.Join(t.TempDir(), "state.json")), now
 }
 
@@ -233,7 +235,7 @@ func TestUIDataLoadLimitsUpdateAndView(t *testing.T) {
 func TestUIDataReadsTheMachineLoadAtMostOnceEveryFiveSeconds(t *testing.T) {
 	h, now := uiFixture(t)
 	reads := 0
-	uiLoadRead = func() loadSample { reads++; return loadSample{Load1: float64(reads), Cores: 8, MemFree: 50} }
+	uiLoadRead = func() platform.Load { reads++; return platform.Load{Load1: float64(reads), Cores: 8, MemFree: 50} }
 	for _, step := range []time.Duration{0, time.Second, 4 * time.Second} {
 		clock = func() time.Time { return now.Add(step) }
 		uiData(h, uiViewState{})
@@ -245,7 +247,7 @@ func TestUIDataReadsTheMachineLoadAtMostOnceEveryFiveSeconds(t *testing.T) {
 	if got := uiData(h, uiViewState{})["load"].(map[string]any)["load"]; reads != 2 || got != 2.0 {
 		t.Fatalf("after five seconds: %d reads, load %v", reads, got)
 	}
-	uiLoadRead = func() loadSample { return loadSample{Load1: 30, Cores: 8, MemFree: 5} }
+	uiLoadRead = func() platform.Load { return platform.Load{Load1: 30, Cores: 8, MemFree: 5} }
 	clock = func() time.Time { return now.Add(time.Minute) }
 	if got := uiData(h, uiViewState{})["load"].(map[string]any)["overloaded"]; got != true {
 		t.Fatalf("overloaded = %v", got)

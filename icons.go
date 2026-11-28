@@ -87,27 +87,70 @@ func agentIcon(provider string) string {
 }
 
 const orbitFrag = `
+vec2 orbitAt(float t, float k) {
+  float w = 0.8975979;
+  float ph = 2.0943951 * k;
+  float th = 3.5903916 * t + 0.55 * sin(4.0 * w * t) + 0.4 * sin(w * t + ph) + ph;
+  float v = 3.5903916 + 1.9747154 * cos(4.0 * w * t) + 0.3590392 * cos(w * t + ph);
+  return vec2(th, v);
+}
+
 vec4 effect(vec2 uv) {
   vec2 p = (uv - 0.5) * u_res;
   float s = 0.5 * min(u_res.x, u_res.y);
+  // every rate below is a whole multiple of 2pi/7, so wrapping here is seamless and keeps sin() precise in long sessions
+  float t = mod(u_time, 7.0);
+  float w = 0.8975979;
   float d = length(p);
   float phi = atan(p.y, p.x);
-  float g = (d - 0.64 * s) / 0.9;
-  float a = 0.14 * exp(-g * g);
+  float r = s * (0.62 + 0.035 * sin(2.0 * w * t));
+  float g = (d - r) / 0.9;
+  vec3 tint = vec3(tintR, tintG, tintB);
+  vec3 kx = cross(vec3(0.57735), tint) * 0.2474;
+  vec3 kd = vec3(dot(vec3(0.33333), tint)) * 0.0311 + tint * 0.9689;
+  vec3 warm = clamp(kd + kx, 0.0, 1.0);
+  vec3 cool = clamp(kd - kx, 0.0, 1.0);
+  float a = 0.05 * exp(-g * g);
+  vec3 col = tint * a;
   for (int i = 0; i < 3; i++) {
     float k = float(i);
-    float r = (0.56 + 0.08 * k) * s;
-    float th = u_time * 3.6 + 2.0944 * k + 0.45 * sin(u_time * 0.8 + 2.0 * k);
+    vec2 o = orbitAt(t, k);
+    float th = o.x;
     float lag = mod(th - phi, 6.28318);
-    float w = max(0.11 * s * (1.0 - lag * 0.22), 0.35);
-    float e = (d - r) / w;
-    float tail = 0.7 * exp(-lag * 1.8) * exp(-e * e);
+    float tw = max(0.1 * s * exp(-lag * 0.9), 0.4);
+    float e = (d - r) / tw;
+    float tail = 0.8 * exp(-lag * 4.5 / o.y) * exp(-e * e);
     vec2 q = p - r * vec2(cos(th), sin(th));
     float h = dot(q, q) / (s * s);
-    a += tail + exp(-h * 55.0) + 0.22 * exp(-h * 14.0);
+    float head = exp(-h * 70.0) + 0.2 * exp(-h * 22.0);
+    a += tail + head;
+    col += mix(cool, warm, exp(-lag * 0.9)) * tail + warm * head;
+    for (int j = 0; j < 2; j++) {
+      float c = t / 0.7 + 0.5 * float(j) + 0.33333 * k;
+      float age = fract(c);
+      float n = mod(floor(c), 10.0);
+      float rnd = fract(sin(n * 12.9898 + k * 78.233) * 43758.5453);
+      float ts = t - age * 0.7;
+      float sa = orbitAt(ts, k).x + (rnd - 0.5) * 0.6;
+      float sr = s * (0.62 + 0.035 * sin(2.0 * w * ts) + age * (0.2 + 0.16 * rnd));
+      vec2 sq = p - sr * vec2(cos(sa), sin(sa));
+      float spark = 0.75 * (1.0 - age) * (1.0 - age) * exp(-dot(sq, sq) / (s * s) * 110.0);
+      a += spark;
+      col += warm * spark;
+    }
+    // comets k and k+1 are closest when this cosine is -1
+    float cm = cos(w * t + 2.0943951 * k + 1.0471976);
+    float mid = th + 1.0471976 + 0.3464102 * cm;
+    vec2 m = p - r * vec2(cos(mid), sin(mid));
+    vec2 am = abs(m) / s;
+    float star = exp(-dot(am, am) * 220.0) + 0.45 * (exp(-am.x * 7.0 - am.y * am.y * 600.0) + exp(-am.y * 7.0 - am.x * am.x * 600.0));
+    float glint = 0.6 * exp(-12.0 * (1.0 + cm)) * star;
+    a += glint;
+    col += mix(warm, vec3(1.0), 0.3) * glint;
   }
-  a = clamp(a, 0.0, 1.0);
-  return vec4(vec3(tintR, tintG, tintB) * a, a);
+  float alpha = clamp(a, 0.0, 1.0);
+  col = min(col * (alpha / max(a, 0.0001)), vec3(alpha));
+  return vec4(col, alpha);
 }`
 
 const stillFrag = `vec4 effect(vec2 uv) { return src(uv); }`

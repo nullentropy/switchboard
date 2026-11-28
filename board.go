@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	caution "github.com/nullentropy/caution"
+
+	"switchboard/platform"
 )
 
 type section struct {
@@ -52,7 +54,7 @@ func (v *View) buildBoard() *caution.Node {
 			caution.Panel().Fill(1),
 		)
 		if s.inbox {
-			s.head.Add(hints([][2]string{{"A  " + modLabel + "Y", "allow"}, {"D  " + shiftLabel + modLabel + "D", "deny"}, {shiftLabel + "A  " + shiftLabel + modLabel + "Y", "always"}, {modLabel + "J", "next"}, {"Enter", "open"}}))
+			s.head.Add(hints([][2]string{{"A  " + platform.ModLabel + "Y", "allow"}, {"D  " + platform.ShiftLabel + platform.ModLabel + "D", "deny"}, {platform.ShiftLabel + "A  " + platform.ShiftLabel + platform.ModLabel + "Y", "always"}, {platform.ModLabel + "J", "next"}, {"Enter", "open"}}))
 		}
 		switch {
 		case s.inbox:
@@ -158,7 +160,7 @@ func (v *View) layoutBoard() {
 			s.body.Add(caution.Panel().H(40).Bg("$panel").Radius(10).Border("$edgeSoft", 1).Kids(
 				caution.Glass().HoverFill("$hover").Anchor(fill()).OnPick(func(_, _ float64, _ *caution.Node) { v.nextWaiting() }),
 				caution.HStack().Gap(8).Align("center").Anchor(caution.A{Left: px(16), CenterY: px(0)}).Kids(
-					caution.Label(fmt.Sprintf("%d more waiting", n-5)).FontSize(13).Color("$inkDim"), kbd(modLabel+"J")),
+					caution.Label(fmt.Sprintf("%d more waiting", n-5)).FontSize(13).Color("$inkDim"), kbd(platform.ModLabel+"J")),
 			))
 		}
 		if n > 0 {
@@ -521,30 +523,30 @@ func (v *View) bindKeys() {
 	s := v.s
 	for i := 1; i <= 9; i++ {
 		n := i
-		s.OnKey(fmt.Sprintf("%s+%d", modKey, n), func() {
+		s.OnKey(fmt.Sprintf("%s+%d", platform.ModKey, n), func() {
 			if n <= len(v.shown) {
 				v.select_(v.shown[n-1])
 				v.openFocus(v.shown[n-1])
 			}
 		})
 	}
-	s.OnKey(modKey+"+0", v.closeFocus)
-	s.OnKey(modKey+"+n", v.openNew)
-	s.OnKey(modKey+"+k", v.openPalette)
-	s.OnKey(modKey+"+l", v.focusInput)
-	s.OnKey(modKey+"+j", v.nextWaiting)
-	s.OnKey(modKey+"+.", func() {
+	s.OnKey(platform.ModKey+"+0", v.closeFocus)
+	s.OnKey(platform.ModKey+"+n", v.openNew)
+	s.OnKey(platform.ModKey+"+k", v.openPalette)
+	s.OnKey(platform.ModKey+"+l", v.focusInput)
+	s.OnKey(platform.ModKey+"+j", v.nextWaiting)
+	s.OnKey(platform.ModKey+"+.", func() {
 		if a := v.target(); a != nil {
 			a.Interrupt()
 		}
 	})
-	s.OnKey(modKey+"+e", func() {
+	s.OnKey(platform.ModKey+"+e", func() {
 		if a := v.target(); a != nil && len(a.Snapshot().Queued) > 0 {
 			v.openFocus(a)
 			v.focus.editNewest()
 		}
 	})
-	s.OnKey(modKey+"+shift+e", func() {
+	s.OnKey(platform.ModKey+"+shift+e", func() {
 		switch {
 		case v.focus != nil:
 			v.focus.sendNow()
@@ -552,7 +554,7 @@ func (v *View) bindKeys() {
 			go v.target().SendNow("")
 		}
 	})
-	s.OnKey(modKey+"+backspace", func() {
+	s.OnKey(platform.ModKey+"+backspace", func() {
 		if a := v.target(); a != nil {
 			v.confirmRemove(a)
 		}
@@ -578,9 +580,9 @@ func (v *View) bindKeys() {
 	s.OnKey("a", func() { v.answer(true, false) })
 	s.OnKey("shift+a", func() { v.answer(true, true) })
 	s.OnKey("d", func() { v.answer(false, false) })
-	s.OnKey(modKey+"+y", func() { v.answer(true, false) })
-	s.OnKey(modKey+"+shift+y", func() { v.answer(true, true) })
-	s.OnKey(modKey+"+shift+d", func() { v.answer(false, false) })
+	s.OnKey(platform.ModKey+"+y", func() { v.answer(true, false) })
+	s.OnKey(platform.ModKey+"+shift+y", func() { v.answer(true, true) })
+	s.OnKey(platform.ModKey+"+shift+d", func() { v.answer(false, false) })
 	s.OnKey(".", func() {
 		if a := v.target(); a != nil {
 			a.Interrupt()
@@ -666,13 +668,13 @@ func (v *View) confirmResume(list []*Agent) {
 
 func (v *View) paletteItems() []paletteItem {
 	items := []paletteItem{
-		{"New session", modLabel + "N", icPlus, v.openNew, "Actions"},
+		{"New session", platform.ModLabel + "N", icPlus, v.openNew, "Actions"},
 		{"Ask the dispatcher", "", icSparkles, v.focusCommand, "Actions"},
-		{"Write a message", modLabel + "L", icSend, v.focusInput, "Actions"},
-		{"Next session that needs you", modLabel + "J", icHand, v.nextWaiting, "Actions"},
-		{"All sessions", modLabel + "0", icLayers, v.closeFocus, "Actions"},
+		{"Write a message", platform.ModLabel + "L", icSend, v.focusInput, "Actions"},
+		{"Next session that needs you", platform.ModLabel + "J", icHand, v.nextWaiting, "Actions"},
+		{"All sessions", platform.ModLabel + "0", icLayers, v.closeFocus, "Actions"},
 		{"Keyboard shortcuts", "?", icKeys, v.openShortcuts, "Actions"},
-		{"Settings", modLabel + ",", icSettings, v.openSettings, "Actions"},
+		{"Settings", platform.ModLabel + ",", icSettings, v.openSettings, "Actions"},
 		{"Check for updates", "", icRetry, v.checkForUpdates, "Actions"},
 	}
 	if tag := v.hub.UpdateReady(); tag != "" {
@@ -682,12 +684,12 @@ func (v *View) paletteItems() []paletteItem {
 		title := a.Snapshot().Meta.Title
 		g := "On " + title
 		items = append(items,
-			paletteItem{"Allow what it asks", "A  " + modLabel + "Y", icCheck, func() { v.answer(true, false) }, g},
-			paletteItem{"Deny what it asks", "D  " + shiftLabel + modLabel + "D", icFail, func() { v.answer(false, false) }, g},
-			paletteItem{"Interrupt the turn", modLabel + ".", icPause, a.Interrupt, g},
+			paletteItem{"Allow what it asks", "A  " + platform.ModLabel + "Y", icCheck, func() { v.answer(true, false) }, g},
+			paletteItem{"Deny what it asks", "D  " + platform.ShiftLabel + platform.ModLabel + "D", icFail, func() { v.answer(false, false) }, g},
+			paletteItem{"Interrupt the turn", platform.ModLabel + ".", icPause, a.Interrupt, g},
 			paletteItem{"Rename", "R", icCircle, func() { v.openRename(a) }, g},
 			paletteItem{"End the session", "", icCircle, func() { v.confirmEnd(a) }, g},
-			paletteItem{"Remove from the wall", modLabel + backspaceLabel, icCircle, func() { v.confirmRemove(a) }, g},
+			paletteItem{"Remove from the wall", platform.ModLabel + platform.BackspaceLabel, icCircle, func() { v.confirmRemove(a) }, g},
 		)
 	}
 	for i, a := range v.shown {
@@ -695,7 +697,7 @@ func (v *View) paletteItems() []paletteItem {
 		s := a.Snapshot()
 		hint := ""
 		if i < 9 {
-			hint = fmt.Sprintf("%s%d", modLabel, i+1)
+			hint = fmt.Sprintf("%s%d", platform.ModLabel, i+1)
 		}
 		items = append(items, paletteItem{s.Meta.Title + "  ·  " + providerName(s.Meta.Provider) + "  ·  " + s.State.String(),
 			hint, stateIcon(s.State), func() { v.select_(a); v.openFocus(a) }, "Sessions"})
@@ -904,7 +906,7 @@ func (v *View) buildEmpty() *caution.Node {
 			caution.Label("Start one yourself, or give the dispatcher a goal and it starts the sessions for you.").FontSize(13).Color("$inkDim"),
 		),
 		caution.HStack().Gap(8).Align("center").Kids(
-			caution.Button("New session").Primary().OnClick(v.openNew), kbd(modLabel+"N"),
+			caution.Button("New session").Primary().OnClick(v.openNew), kbd(platform.ModLabel+"N"),
 		),
 		caution.Label("AGENTS").FontSize(11).Weight(650).Color("$inkFaint"),
 		agents,
@@ -917,12 +919,12 @@ func (v *View) openShortcuts() {
 	rows := caution.Grid([]caution.GridCol{{Px: 120}, {Weight: 1, Align: "stretch"}}).ColGap(14).RowGap(10).
 		Anchor(caution.A{Left: px(24), Right: px(24), Top: px(18)})
 	for _, h := range [][2]string{
-		{modLabel + "K", "Commands: every action and session"}, {modLabel + "N", "New session"}, {modLabel + "L", "Write in the open session, or ask the dispatcher"},
-		{"J  K", "Move between sessions"}, {"Enter", "Open the selected session, write in the open one, or send the answers to a question"}, {modLabel + "1 … " + modLabel + "9", "Open a session by position"},
-		{"A  " + modLabel + "Y", "Allow what the selected or first waiting session asks"}, {shiftLabel + "A  " + shiftLabel + modLabel + "Y", "Always allow it for that session"},
-		{"D  " + shiftLabel + modLabel + "D", "Deny it"}, {modLabel + "J", "Jump to the next session that needs you"}, {".", "Interrupt the turn"},
-		{modLabel + "E", "Edit the newest pending message"}, {shiftLabel + modLabel + "E", "Interrupt and send pending messages now"},
-		{"R", "Rename"}, {modLabel + backspaceLabel, "Remove"}, {"Esc", "Leave the message box, then back to all sessions"}, {modLabel + ",", "Settings"},
+		{platform.ModLabel + "K", "Commands: every action and session"}, {platform.ModLabel + "N", "New session"}, {platform.ModLabel + "L", "Write in the open session, or ask the dispatcher"},
+		{"J  K", "Move between sessions"}, {"Enter", "Open the selected session, write in the open one, or send the answers to a question"}, {platform.ModLabel + "1 … " + platform.ModLabel + "9", "Open a session by position"},
+		{"A  " + platform.ModLabel + "Y", "Allow what the selected or first waiting session asks"}, {platform.ShiftLabel + "A  " + platform.ShiftLabel + platform.ModLabel + "Y", "Always allow it for that session"},
+		{"D  " + platform.ShiftLabel + platform.ModLabel + "D", "Deny it"}, {platform.ModLabel + "J", "Jump to the next session that needs you"}, {".", "Interrupt the turn"},
+		{platform.ModLabel + "E", "Edit the newest pending message"}, {platform.ShiftLabel + platform.ModLabel + "E", "Interrupt and send pending messages now"},
+		{"R", "Rename"}, {platform.ModLabel + platform.BackspaceLabel, "Remove"}, {"Esc", "Leave the message box, then back to all sessions"}, {platform.ModLabel + ",", "Settings"},
 	} {
 		rows.Add(caution.HStack().Kids(kbd(h[0])))
 		rows.Add(caution.Label(h[1]).FontSize(13).Color("$inkDim"))

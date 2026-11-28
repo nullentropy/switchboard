@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"switchboard/platform"
 )
 
 type proc struct {
@@ -41,7 +43,7 @@ type rpcMsg struct {
 var errExited = errors.New("the process exited")
 
 func startProc(a *Agent, bin string, args []string, onLine func([]byte)) (*proc, error) {
-	cmd := command(bin, args...)
+	cmd := platform.Command(bin, args...)
 	cmd.Dir = a.Meta.Cwd
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -53,7 +55,7 @@ func startProc(a *Agent, bin string, args []string, onLine func([]byte)) (*proc,
 	}
 	p := &proc{cmd: cmd, stdin: stdin, stderr: &tailBuf{max: 4096}, done: make(chan struct{}), waits: map[string]chan rpcMsg{}}
 	cmd.Stderr = p.stderr
-	if err := startProcess(cmd, a != a.hub.Dispatcher); err != nil {
+	if err := platform.StartProcess(cmd, a != a.hub.Dispatcher); err != nil {
 		return nil, fmt.Errorf("start %s: %w", bin, err)
 	}
 	go func() {
@@ -86,20 +88,20 @@ func (p *proc) stop() {
 		select {
 		case <-p.done:
 		case <-time.After(3 * time.Second):
-			killTree(p.cmd.Process)
+			platform.KillTree(p.cmd.Process)
 		}
 	}()
 }
 
 func (p *proc) end(grace time.Duration) {
 	_ = p.stdin.Close()
-	terminateTree(p.cmd.Process)
+	platform.TerminateTree(p.cmd.Process)
 	select {
 	case <-p.done:
 		return
 	case <-time.After(grace):
 	}
-	killTree(p.cmd.Process)
+	platform.KillTree(p.cmd.Process)
 	select {
 	case <-p.done:
 	case <-time.After(grace):

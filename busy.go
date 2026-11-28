@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/nullentropy/caution"
+
+	"switchboard/platform"
 )
 
 const (
@@ -17,7 +19,7 @@ const (
 	busyPad    = 8
 )
 
-var reduceMotion = osReduceMotion
+var reduceMotion = platform.ReduceMotion
 
 type busyPick struct {
 	turn  time.Time
